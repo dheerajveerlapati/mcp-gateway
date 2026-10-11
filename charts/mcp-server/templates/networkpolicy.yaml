@@ -1,0 +1,49 @@
+{{- if .Values.networkPolicy.enabled }}
+# Firewall for this MCP server:
+#  - in:  only gateway pods may connect
+#  - out: only DNS plus the destinations listed in values (e.g. the store),
+#         so even a compromised server cannot reach anything else.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ .Release.Name }}
+  labels:
+    {{- include "mcp-server.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "mcp-server.selectorLabels" . | nindent 6 }}
+  policyTypes: [Ingress, Egress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ .Values.networkPolicy.allowFrom.namespace }}
+          podSelector:
+            matchLabels:
+              {{- toYaml .Values.networkPolicy.allowFrom.podLabels | nindent 14 }}
+      ports:
+        - port: {{ .Values.port }}
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - { port: 53, protocol: UDP }
+        - { port: 53, protocol: TCP }
+    {{- range .Values.networkPolicy.egressTo }}
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ .namespace }}
+          podSelector:
+            matchLabels:
+              {{- toYaml .podLabels | nindent 14 }}
+      ports:
+        - port: {{ .port }}
+    {{- end }}
+{{- end }}

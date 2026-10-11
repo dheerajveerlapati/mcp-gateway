@@ -1,0 +1,4 @@
+# Local k3d: images are built on this machine and imported into the cluster
+# by scripts/up.sh, so never try to pull them from a registry.
+image:
+  pullPolicy: Never

@@ -1,0 +1,90 @@
+# MariaDB: the shop's database. A StatefulSet gives the pod a stable name and
+# its own PersistentVolumeClaim, so the data survives restarts and upgrades.
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Release.Name }}-mariadb
+  labels:
+    {{- include "store.labels" . | nindent 4 }}
+    app.kubernetes.io/name: mariadb
+spec:
+  clusterIP: None # headless: DNS points straight at the database pod
+  selector:
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/name: mariadb
+  ports:
+    - name: mysql
+      port: 3306
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ .Release.Name }}-mariadb
+  labels:
+    {{- include "store.labels" . | nindent 4 }}
+    app.kubernetes.io/name: mariadb
+spec:
+  serviceName: {{ .Release.Name }}-mariadb
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/instance: {{ .Release.Name }}
+      app.kubernetes.io/name: mariadb
+  template:
+    metadata:
+      labels:
+        {{- include "store.labels" . | nindent 8 }}
+        app.kubernetes.io/name: mariadb
+    spec:
+      securityContext:
+        # The image supports running as its "mysql" user (999) directly.
+        runAsNonRoot: true
+        runAsUser: 999
+        runAsGroup: 999
+        fsGroup: 999
+      containers:
+        - name: mariadb
+          image: {{ .Values.mariadb.image }}
+          env:
+            - name: MARIADB_DATABASE
+              value: {{ .Values.mariadb.database }}
+            - name: MARIADB_USER
+              value: {{ .Values.mariadb.user }}
+            - name: MARIADB_PASSWORD
+              valueFrom:
+                secretKeyRef: { name: {{ .Values.existingSecret }}, key: db-password }
+            - name: MARIADB_ROOT_PASSWORD
+              valueFrom:
+                secretKeyRef: { name: {{ .Values.existingSecret }}, key: db-root-password }
+          ports:
+            - name: mysql
+              containerPort: 3306
+          # healthcheck.sh ships with the image and uses its own internal user.
+          # The first start initialises the database, so give it up to 3 minutes.
+          startupProbe:
+            exec: { command: [healthcheck.sh, --connect, --innodb_initialized] }
+            periodSeconds: 5
+            failureThreshold: 36
+          readinessProbe:
+            exec: { command: [healthcheck.sh, --connect, --innodb_initialized] }
+            periodSeconds: 10
+          livenessProbe:
+            exec: { command: [healthcheck.sh, --connect] }
+            periodSeconds: 20
+            failureThreshold: 3
+          resources:
+            {{- toYaml .Values.mariadb.resources | nindent 12 }}
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/mysql
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: [ReadWriteOnce]
+        {{- with .Values.mariadb.storage.storageClass }}
+        storageClassName: {{ . }}
+        {{- end }}
+        resources:
+          requests:
+            storage: {{ .Values.mariadb.storage.size }}

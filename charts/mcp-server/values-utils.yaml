@@ -1,0 +1,8 @@
+# The Shop Utils MCP server (services/utils-mcp). It needs no other service,
+# so its NetworkPolicy allows no outbound traffic except DNS.
+image:
+  repository: utils-mcp
+
+existingSecret: utils-mcp-secrets
+secretEnv:
+  MCP_TOKEN: mcp-token # the gateway sends this as a bearer token

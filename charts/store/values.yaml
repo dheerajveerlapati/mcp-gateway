@@ -1,0 +1,59 @@
+# Defaults for the store chart. Environment files (values-local.yaml,
+# values-prod.yaml) only override what differs.
+
+# Public hostname of the storefront.
+host: store.localtest.me
+
+ingress:
+  className: traefik
+  tls:
+    enabled: false
+    # cert-manager ClusterIssuer used when TLS is on (prod).
+    clusterIssuer: ""
+
+# Secret with all passwords and the WooCommerce API key.
+# Created by scripts/secrets.sh - this chart never contains secret values.
+# Keys: db-root-password, db-password, wp-admin-password,
+#       woo-consumer-key, woo-consumer-secret
+existingSecret: store-secrets
+
+wordpress:
+  image: wordpress:7.1.3-php8.4-apache
+  storage:
+    size: 2Gi
+    storageClass: "" # "" = cluster default (local-path on k3d and k3s)
+  resources:
+    requests: { cpu: 100m, memory: 256Mi }
+    limits: { cpu: "1", memory: 512Mi }
+
+mariadb:
+  image: mariadb:11.8.9
+  database: wordpress
+  user: wordpress
+  storage:
+    size: 2Gi
+    storageClass: ""
+  resources:
+    requests: { cpu: 100m, memory: 256Mi }
+    limits: { cpu: "1", memory: 1Gi }
+
+# One-time (and idempotent) shop setup done with WP-CLI after install/upgrade.
+setup:
+  image: wordpress:cli-2.12.0-php8.4
+  siteTitle: Urumi Demo Store
+  adminUser: admin
+  adminEmail: admin@example.com
+  currency: INR
+  woocommerceVersion: 11.2.1
+  storefrontVersion: 4.6.2
+  sampleProducts: true
+  resources:
+    requests: { cpu: 50m, memory: 128Mi }
+    limits: { cpu: 500m, memory: 512Mi }
+
+networkPolicy:
+  enabled: true
+  # Namespace of the ingress controller (Traefik ships in kube-system on k3s).
+  ingressControllerNamespace: kube-system
+  # Other namespaces allowed to call WordPress (the WooCommerce MCP server).
+  allowedNamespaces: [mcp]

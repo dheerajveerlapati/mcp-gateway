@@ -1,0 +1,8 @@
+apiVersion: v2
+name: mcp-server
+description: >
+  One internal MCP server (Streamable HTTP). Installed once per server, e.g.
+  `woo-mcp` with values-woo.yaml and `utils-mcp` with values-utils.yaml.
+type: application
+version: 0.1.0
+appVersion: "0.1.0"

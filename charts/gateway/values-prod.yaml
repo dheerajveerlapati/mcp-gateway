@@ -1,0 +1,22 @@
+# VPS (k3s). Replace the host with a real DNS name pointing at the VPS.
+host: dashboard.example.com
+
+ingress:
+  tls:
+    enabled: true
+    clusterIssuer: letsencrypt-prod
+
+gateway:
+  image:
+    registry: ghcr.io/OWNER # replace OWNER with the GitHub user/org
+  replicas: 2 # stateless MCP endpoint: any replica can serve any request
+  resources:
+    requests: { cpu: 200m, memory: 256Mi }
+    limits: { cpu: "2", memory: 1Gi }
+
+postgres:
+  storage:
+    size: 5Gi
+  resources:
+    requests: { cpu: 100m, memory: 256Mi }
+    limits: { cpu: "1", memory: 1Gi }

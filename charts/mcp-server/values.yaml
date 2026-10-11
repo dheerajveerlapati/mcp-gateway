@@ -1,0 +1,32 @@
+# Defaults shared by every MCP server. Each server adds values-<server>.yaml,
+# and each environment adds values-local.yaml or values-prod.yaml.
+
+image:
+  registry: "" # "" = built locally and imported into k3d; prod: ghcr.io/<owner>
+  repository: "" # set per server, e.g. woo-mcp
+  tag: "" # "" = chart appVersion
+  pullPolicy: IfNotPresent
+
+replicas: 1
+port: 8000
+
+# Plain environment variables: NAME: value
+env: {}
+
+# Environment variables taken from a Secret: NAME: <key in existingSecret>
+existingSecret: ""
+secretEnv: {}
+
+resources:
+  requests: { cpu: 50m, memory: 96Mi }
+  limits: { cpu: 500m, memory: 256Mi }
+
+networkPolicy:
+  enabled: true
+  # Only the gateway may call an MCP server.
+  allowFrom:
+    namespace: gateway
+    podLabels: { app.kubernetes.io/name: gateway }
+  # Where the server may connect, besides DNS. Empty = nowhere.
+  # Each entry: { namespace, podLabels, port }
+  egressTo: []

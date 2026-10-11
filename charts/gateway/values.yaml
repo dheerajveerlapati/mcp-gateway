@@ -1,0 +1,48 @@
+# Defaults for the gateway chart. values-local.yaml / values-prod.yaml only
+# override what differs per environment.
+
+# Public hostname of the dashboard. The MCP endpoint is https://<host>/mcp.
+host: dashboard.localtest.me
+
+ingress:
+  className: traefik
+  tls:
+    enabled: false
+    clusterIssuer: "" # cert-manager ClusterIssuer when TLS is on (prod)
+
+# Secret with the gateway's secrets. Created by scripts/secrets.sh, never by
+# this chart. Keys: db-password, session-secret, encryption-key,
+# admin-password, woo-mcp-token
+existingSecret: gateway-secrets
+
+gateway:
+  image:
+    registry: "" # "" = built locally and imported into k3d; prod: ghcr.io/<owner>
+    repository: gateway
+    tag: "" # "" = chart appVersion
+    pullPolicy: IfNotPresent
+  replicas: 1
+  # The first admin, created on first start (password from the Secret).
+  bootstrapAdminEmail: admin@example.com
+  # Registered automatically as the first upstream server.
+  wooMcpUrl: http://woo-mcp.mcp:8000/mcp
+  upstreamTimeoutSeconds: 15
+  healthIntervalSeconds: 10
+  resources:
+    requests: { cpu: 100m, memory: 192Mi }
+    limits: { cpu: "1", memory: 512Mi }
+
+postgres:
+  image: postgres:17.11
+  storage:
+    size: 1Gi
+    storageClass: "" # "" = cluster default (local-path on k3d and k3s)
+  resources:
+    requests: { cpu: 50m, memory: 128Mi }
+    limits: { cpu: 500m, memory: 512Mi }
+
+networkPolicy:
+  enabled: true
+  ingressControllerNamespace: kube-system
+  # Namespace of the in-cluster MCP servers the gateway may call.
+  mcpNamespace: mcp

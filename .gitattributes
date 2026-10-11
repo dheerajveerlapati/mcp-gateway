@@ -1,0 +1,3 @@
+# Always use LF line endings: these files run in Linux containers and on the
+# VPS, where CRLF breaks shell scripts (e.g. the store setup Job).
+* text=auto eol=lf

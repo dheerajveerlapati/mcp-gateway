@@ -1,0 +1,24 @@
+# VPS (k3s). Replace the host with a real DNS name pointing at the VPS.
+host: store.example.com
+
+ingress:
+  tls:
+    enabled: true
+    clusterIssuer: letsencrypt-prod
+
+wordpress:
+  storage:
+    size: 10Gi
+  resources:
+    requests: { cpu: 250m, memory: 512Mi }
+    limits: { cpu: "2", memory: 1Gi }
+
+mariadb:
+  storage:
+    size: 10Gi
+  resources:
+    requests: { cpu: 250m, memory: 512Mi }
+    limits: { cpu: "2", memory: 2Gi }
+
+setup:
+  sampleProducts: false

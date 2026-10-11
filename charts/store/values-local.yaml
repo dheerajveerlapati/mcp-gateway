@@ -1,0 +1,3 @@
+# Local k3d cluster. *.localtest.me resolves to 127.0.0.1, and k3d maps
+# host ports 80/443 to Traefik, so no hosts-file edits are needed.
+host: store.localtest.me

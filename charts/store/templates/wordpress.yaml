@@ -1,0 +1,95 @@
+# WordPress + WooCommerce. All site files (core, plugins, themes, uploads)
+# live on one PVC, so plugin installs and product images survive restarts.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ .Release.Name }}-wordpress
+  labels:
+    {{- include "store.labels" . | nindent 4 }}
+    app.kubernetes.io/name: wordpress
+spec:
+  accessModes: [ReadWriteOnce]
+  {{- with .Values.wordpress.storage.storageClass }}
+  storageClassName: {{ . }}
+  {{- end }}
+  resources:
+    requests:
+      storage: {{ .Values.wordpress.storage.size }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Release.Name }}-wordpress
+  labels:
+    {{- include "store.labels" . | nindent 4 }}
+    app.kubernetes.io/name: wordpress
+spec:
+  selector:
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/name: wordpress
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Release.Name }}-wordpress
+  labels:
+    {{- include "store.labels" . | nindent 4 }}
+    app.kubernetes.io/name: wordpress
+spec:
+  replicas: 1
+  # The volume is ReadWriteOnce, so the old pod must stop before the new one
+  # mounts it. (Scaling WordPress out would need shared storage - see docs.)
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/instance: {{ .Release.Name }}
+      app.kubernetes.io/name: wordpress
+  template:
+    metadata:
+      labels:
+        {{- include "store.labels" . | nindent 8 }}
+        app.kubernetes.io/name: wordpress
+    spec:
+      containers:
+        - name: wordpress
+          image: {{ .Values.wordpress.image }}
+          env:
+            {{- include "store.dbEnv" . | nindent 12 }}
+            # Behind the ingress, TLS ends at Traefik. Trust the forwarded scheme
+            # so WordPress builds https:// links instead of redirect-looping.
+            - name: WORDPRESS_CONFIG_EXTRA
+              value: |
+                if (($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '') === 'https') { $_SERVER['HTTPS'] = 'on'; }
+          ports:
+            - name: http
+              containerPort: 80
+          # First start copies WordPress into the empty volume; allow ~2 minutes.
+          startupProbe:
+            httpGet: { path: /wp-includes/images/blank.gif, port: http }
+            periodSeconds: 5
+            failureThreshold: 24
+          # Ready = PHP runs and the database answers (a DB error returns 500).
+          readinessProbe:
+            httpGet: { path: /wp-login.php, port: http }
+            periodSeconds: 10
+            timeoutSeconds: 5
+          # Alive = Apache answers. Deliberately not tied to the database, so a
+          # database outage does not cause WordPress restarts on top of it.
+          livenessProbe:
+            httpGet: { path: /wp-includes/images/blank.gif, port: http }
+            periodSeconds: 20
+            failureThreshold: 3
+          resources:
+            {{- toYaml .Values.wordpress.resources | nindent 12 }}
+          volumeMounts:
+            - name: site
+              mountPath: /var/www/html
+      volumes:
+        - name: site
+          persistentVolumeClaim:
+            claimName: {{ .Release.Name }}-wordpress

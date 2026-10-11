@@ -1,0 +1,18 @@
+# The WooCommerce MCP server (services/woo-mcp).
+image:
+  repository: woo-mcp
+
+env:
+  WOO_URL: http://store-wordpress.store # internal Service of the store chart
+
+existingSecret: woo-mcp-secrets
+secretEnv:
+  WOO_CONSUMER_KEY: woo-consumer-key
+  WOO_CONSUMER_SECRET: woo-consumer-secret
+  MCP_TOKEN: mcp-token # the gateway sends this as a bearer token
+
+networkPolicy:
+  egressTo:
+    - namespace: store
+      podLabels: { app.kubernetes.io/name: wordpress }
+      port: 80

@@ -1,0 +1,9 @@
+# VPS: images come from GitHub Container Registry, two replicas for availability.
+image:
+  registry: ghcr.io/OWNER # replace OWNER with the GitHub user/org
+
+replicas: 2
+
+resources:
+  requests: { cpu: 100m, memory: 128Mi }
+  limits: { cpu: "1", memory: 512Mi }

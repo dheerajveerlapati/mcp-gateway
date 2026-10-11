@@ -1,0 +1,15 @@
+# Internal address only (ClusterIP). There is deliberately no Ingress:
+# the gateway reaches it at http://<release>.<namespace>:<port>/mcp
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Release.Name }}
+  labels:
+    {{- include "mcp-server.labels" . | nindent 4 }}
+spec:
+  selector:
+    {{- include "mcp-server.selectorLabels" . | nindent 4 }}
+  ports:
+    - name: http
+      port: {{ .Values.port }}
+      targetPort: http
