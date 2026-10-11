@@ -12,7 +12,7 @@ from starlette.routing import Route
 from app.config import settings
 from app.db import Server, Session, User
 from app.mcp_gateway import McpEndpoint, session_manager
-from app.routes import auth, keys, servers, users
+from app.routes import audit, auth, keys, servers, users
 from app.security import encrypt, hash_password
 from app.upstreams import upstreams
 
@@ -57,6 +57,7 @@ app.include_router(auth.router)
 app.include_router(users.router)
 app.include_router(keys.router)
 app.include_router(servers.router)
+app.include_router(audit.router)
 
 
 @app.get("/healthz", include_in_schema=False)

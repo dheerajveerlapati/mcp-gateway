@@ -1,6 +1,7 @@
 # One public host for everything people use:
 #   /mcp  -> gateway (MCP clients and the chat agent)
 #   /api  -> gateway (dashboard API)
+#   /     -> dashboard (the React pages)
 # Same host for the API and the pages means no CORS, and the login cookie
 # stays first-party.
 apiVersion: networking.k8s.io/v1
@@ -35,4 +36,10 @@ spec:
             backend:
               service:
                 name: {{ .Release.Name }}
+                port: { name: http }
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ .Release.Name }}-dashboard
                 port: { name: http }

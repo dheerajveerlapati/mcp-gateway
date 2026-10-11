@@ -58,6 +58,28 @@ spec:
       ports:
         - port: 443
 ---
+# The dashboard only serves static files: reachable from the ingress
+# controller, and it never opens a connection itself.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ .Release.Name }}-dashboard
+  labels:
+    {{- include "gateway.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/instance: {{ .Release.Name }}
+      app.kubernetes.io/name: dashboard
+  policyTypes: [Ingress, Egress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ .Values.networkPolicy.ingressControllerNamespace }}
+      ports:
+        - port: 8080
+---
 # Only the gateway may talk to its database; the database talks to no one.
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy

@@ -12,18 +12,18 @@ if ! k3d cluster get "$CLUSTER" >/dev/null 2>&1; then
   k3d cluster create "$CLUSTER" -p "80:80@loadbalancer" -p "443:443@loadbalancer" --wait
 fi
 
-# build_image <service>: builds services/<service> and loads it into k3d.
-# The tag is a hash of the source, so a code change means a new tag and
-# Helm rolls the pods; no change means nothing restarts.
+# build_image <service>: builds services/<service>, loads it into k3d and
+# sets TAG. The tag is a hash of the source, so a code change means a new
+# tag and Helm rolls the pods; no change means nothing restarts.
+# (It sets TAG instead of printing it: inside $(...) a failed build would
+# not stop the script.)
 build_image() {
   local service=$1
-  local tag
-  tag=$(git ls-files -co --exclude-standard "services/$service" | sort | xargs cat | sha1sum | cut -c1-12)
-  if ! docker image inspect "$service:$tag" >/dev/null 2>&1; then
-    docker build -t "$service:$tag" "services/$service"
+  TAG=$(git ls-files -co --exclude-standard "services/$service" | sort | xargs cat | sha1sum | cut -c1-12)
+  if ! docker image inspect "$service:$TAG" >/dev/null 2>&1; then
+    docker build -t "$service:$TAG" "services/$service"
   fi
-  k3d image import "$service:$tag" -c "$CLUSTER" >/dev/null
-  echo "$tag"
+  k3d image import "$service:$TAG" -c "$CLUSTER"
 }
 
 ./scripts/secrets.sh
@@ -31,20 +31,26 @@ build_image() {
 helm upgrade --install store charts/store --namespace store \
   -f charts/store/values-local.yaml --wait --timeout 15m
 
-WOO_TAG=$(build_image woo-mcp | tail -1)
+build_image woo-mcp
+WOO_TAG=$TAG
 helm upgrade --install woo-mcp charts/mcp-server --namespace mcp \
   -f charts/mcp-server/values-woo.yaml -f charts/mcp-server/values-local.yaml \
   --set image.tag="$WOO_TAG" --wait --timeout 5m
 
-UTILS_TAG=$(build_image utils-mcp | tail -1)
+build_image utils-mcp
+UTILS_TAG=$TAG
 helm upgrade --install utils-mcp charts/mcp-server --namespace mcp \
   -f charts/mcp-server/values-utils.yaml -f charts/mcp-server/values-local.yaml \
   --set image.tag="$UTILS_TAG" --wait --timeout 5m
 
-GATEWAY_TAG=$(build_image gateway | tail -1)
+build_image gateway
+GATEWAY_TAG=$TAG
+build_image dashboard
+DASHBOARD_TAG=$TAG
 helm upgrade --install gateway charts/gateway --namespace gateway \
   -f charts/gateway/values-local.yaml \
-  --set gateway.image.tag="$GATEWAY_TAG" --wait --timeout 5m
+  --set gateway.image.tag="$GATEWAY_TAG" --set dashboard.image.tag="$DASHBOARD_TAG" \
+  --wait --timeout 5m
 
 echo
 echo "Storefront: http://store.localtest.me"

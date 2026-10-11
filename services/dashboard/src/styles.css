@@ -1,0 +1,87 @@
+/* One small stylesheet for the whole dashboard. Colors are variables so
+   dark mode only has to redefine them. */
+:root {
+  --bg: #f6f7f9;
+  --card: #ffffff;
+  --text: #1d2330;
+  --muted: #667085;
+  --border: #e3e6eb;
+  --accent: #3b5bdb;
+  --danger: #c92a2a;
+  --ok: #2b8a3e;
+  --warn: #e67700;
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  color: var(--text);
+  background: var(--bg);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #111418;
+    --card: #1a1f26;
+    --text: #e6e9ef;
+    --muted: #98a2b3;
+    --border: #2c333d;
+    --accent: #748ffc;
+    --danger: #ff6b6b;
+    --ok: #69db7c;
+    --warn: #ffa94d;
+  }
+}
+
+body { margin: 0; background: var(--bg); }
+main { max-width: 1100px; margin: 0 auto; padding: 16px; }
+h1 { font-size: 1.5rem; margin: 8px 0 16px; }
+h2 { font-size: 1.1rem; margin: 0; }
+code { font-family: ui-monospace, Consolas, monospace; font-size: 0.85em; word-break: break-all; }
+
+.topbar {
+  display: flex; align-items: center; gap: 24px; flex-wrap: wrap;
+  padding: 12px 24px; background: var(--card); border-bottom: 1px solid var(--border);
+}
+.topbar nav { display: flex; gap: 16px; flex: 1; }
+.topbar nav a { color: var(--muted); text-decoration: none; }
+.topbar nav a.active { color: var(--accent); font-weight: 600; }
+
+.card {
+  background: var(--card); border: 1px solid var(--border); border-radius: 8px;
+  padding: 16px; margin-bottom: 16px; display: flex; flex-direction: column; gap: 10px;
+}
+.card.narrow { max-width: 380px; margin: 80px auto; }
+.page-title { display: flex; justify-content: space-between; align-items: center; }
+.row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.grow { flex: 1; }
+.muted { color: var(--muted); font-size: 0.9em; }
+.error { color: var(--danger); margin: 0; }
+.notice { border: 1px dashed var(--accent); border-radius: 6px; padding: 12px; display: flex; flex-direction: column; gap: 8px; }
+.filters { margin-bottom: 12px; }
+.tools { margin: 8px 0 0; padding-left: 18px; display: flex; flex-direction: column; gap: 4px; }
+
+label { display: flex; flex-direction: column; gap: 4px; font-size: 0.9em; }
+input, select {
+  padding: 7px 9px; border: 1px solid var(--border); border-radius: 6px;
+  background: var(--bg); color: var(--text); font: inherit;
+}
+.row input { flex: 1; min-width: 160px; }
+
+button {
+  padding: 7px 14px; border: 1px solid var(--accent); border-radius: 6px;
+  background: var(--accent); color: #fff; font: inherit; cursor: pointer;
+}
+button.secondary { background: transparent; color: var(--accent); }
+button.danger { background: transparent; color: var(--danger); border-color: var(--danger); }
+button.link { background: none; border: none; color: var(--accent); padding: 0; }
+
+table { width: 100%; border-collapse: collapse; font-size: 0.9em; }
+th, td { text-align: left; padding: 8px 6px; border-bottom: 1px solid var(--border); vertical-align: top; }
+th { color: var(--muted); font-weight: 500; }
+.card table { overflow-x: auto; display: block; }
+
+.badge { padding: 2px 8px; border-radius: 10px; font-size: 0.8em; border: 1px solid currentColor; }
+.badge-connected, .badge-ok { color: var(--ok); }
+.badge-unreachable, .badge-error, .badge-timeout, .badge-denied { color: var(--danger); }
+.badge-disabled, .badge-unknown { color: var(--muted); }
+
+.copy-box { display: flex; flex-direction: column; gap: 4px; }
+.copy-box code { padding: 8px; background: var(--bg); border: 1px solid var(--border); border-radius: 6px; }
+.copy-box button { align-self: flex-start; }

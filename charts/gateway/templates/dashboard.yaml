@@ -1,0 +1,66 @@
+# The dashboard: static React files served by a non-root nginx.
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Release.Name }}-dashboard
+  labels:
+    {{- include "gateway.labels" . | nindent 4 }}
+    app.kubernetes.io/name: dashboard
+spec:
+  selector:
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/name: dashboard
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Release.Name }}-dashboard
+  labels:
+    {{- include "gateway.labels" . | nindent 4 }}
+    app.kubernetes.io/name: dashboard
+spec:
+  replicas: {{ .Values.dashboard.replicas }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/instance: {{ .Release.Name }}
+      app.kubernetes.io/name: dashboard
+  template:
+    metadata:
+      labels:
+        {{- include "gateway.labels" . | nindent 8 }}
+        app.kubernetes.io/name: dashboard
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 101 # the nginx user of the unprivileged image
+        seccompProfile: { type: RuntimeDefault }
+      containers:
+        - name: nginx
+          image: {{ include "gateway.imageRef" (list .Values.dashboard.image .Chart.AppVersion) }}
+          imagePullPolicy: {{ .Values.dashboard.image.pullPolicy }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: [ALL] }
+          ports:
+            - name: http
+              containerPort: 8080
+          readinessProbe:
+            httpGet: { path: /healthz, port: http }
+            periodSeconds: 10
+          livenessProbe:
+            httpGet: { path: /healthz, port: http }
+            periodSeconds: 20
+          resources:
+            {{- toYaml .Values.dashboard.resources | nindent 12 }}
+          volumeMounts:
+            - name: tmp # nginx writes its pid and temp files here
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir: {}

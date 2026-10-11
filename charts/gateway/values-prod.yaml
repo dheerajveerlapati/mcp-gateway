@@ -14,6 +14,11 @@ gateway:
     requests: { cpu: 200m, memory: 256Mi }
     limits: { cpu: "2", memory: 1Gi }
 
+dashboard:
+  image:
+    registry: ghcr.io/OWNER
+  replicas: 2
+
 postgres:
   storage:
     size: 5Gi

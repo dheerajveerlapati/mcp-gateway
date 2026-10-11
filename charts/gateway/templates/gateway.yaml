@@ -43,7 +43,7 @@ spec:
       # the same time take turns via a Postgres lock (see migrations/env.py).
       initContainers:
         - name: migrate
-          image: {{ include "gateway.image" . }}
+          image: {{ include "gateway.imageRef" (list .Values.gateway.image .Chart.AppVersion) }}
           imagePullPolicy: {{ .Values.gateway.image.pullPolicy }}
           command: [alembic, upgrade, head]
           env:
@@ -56,7 +56,7 @@ spec:
             {{- toYaml .Values.gateway.resources | nindent 12 }}
       containers:
         - name: gateway
-          image: {{ include "gateway.image" . }}
+          image: {{ include "gateway.imageRef" (list .Values.gateway.image .Chart.AppVersion) }}
           imagePullPolicy: {{ .Values.gateway.image.pullPolicy }}
           env:
             {{- include "gateway.env" . | nindent 12 }}

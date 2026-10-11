@@ -6,10 +6,11 @@ app.kubernetes.io/managed-by: {{ .Release.Service }}
 helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version }}
 {{- end }}
 
-{{/* Full image reference: [registry/]repository:tag */}}
-{{- define "gateway.image" -}}
-{{- $image := .Values.gateway.image -}}
-{{- $tag := $image.tag | default .Chart.AppVersion -}}
+{{/* Full image reference [registry/]repository:tag.
+     Usage: include "gateway.imageRef" (list .Values.gateway.image .Chart.AppVersion) */}}
+{{- define "gateway.imageRef" -}}
+{{- $image := index . 0 -}}
+{{- $tag := $image.tag | default (index . 1) -}}
 {{- if $image.registry -}}
 {{ $image.registry }}/{{ $image.repository }}:{{ $tag }}
 {{- else -}}

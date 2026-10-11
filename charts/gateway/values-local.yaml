@@ -1,6 +1,10 @@
 # Local k3d. *.localtest.me resolves to 127.0.0.1 (see the store chart).
 host: dashboard.localtest.me
 
+# Images are built on this machine and imported by scripts/up.sh.
 gateway:
   image:
-    pullPolicy: Never # built on this machine and imported by scripts/up.sh
+    pullPolicy: Never
+dashboard:
+  image:
+    pullPolicy: Never
