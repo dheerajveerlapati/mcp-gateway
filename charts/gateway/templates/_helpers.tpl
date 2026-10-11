@@ -43,6 +43,11 @@ helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version }}
 - { name: PUBLIC_URL, value: {{ include "gateway.publicUrl" . | quote }} }
 - { name: UPSTREAM_TIMEOUT_SECONDS, value: {{ .Values.gateway.upstreamTimeoutSeconds | quote }} }
 - { name: HEALTH_INTERVAL_SECONDS, value: {{ .Values.gateway.healthIntervalSeconds | quote }} }
+- { name: TIMEZONE, value: {{ .Values.gateway.timezone | quote }} }
+- { name: LLM_MODEL, value: {{ .Values.llm.model | quote }} }
+- name: GEMINI_API_KEY
+  valueFrom:
+    secretKeyRef: { name: {{ .Values.llm.existingSecret }}, key: gemini-api-key, optional: true }
 {{- end }}
 
 {{- define "gateway.publicUrl" -}}

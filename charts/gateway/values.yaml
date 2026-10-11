@@ -28,9 +28,18 @@ gateway:
   wooMcpUrl: http://woo-mcp.mcp:8000/mcp
   upstreamTimeoutSeconds: 15
   healthIntervalSeconds: 10
+  # Time zone the chat agent uses for "today".
+  timezone: Asia/Kolkata
   resources:
-    requests: { cpu: 100m, memory: 192Mi }
-    limits: { cpu: "1", memory: 512Mi }
+    requests: { cpu: 100m, memory: 256Mi }
+    limits: { cpu: "1", memory: 768Mi }
+
+# Chat agent model. The API key lives in its own Secret, created by hand:
+#   kubectl -n gateway create secret generic llm-secrets --from-literal=gemini-api-key=...
+# Without it everything works except the chat, which says it is not configured.
+llm:
+  model: gemini-3.5-flash
+  existingSecret: llm-secrets
 
 dashboard:
   image:

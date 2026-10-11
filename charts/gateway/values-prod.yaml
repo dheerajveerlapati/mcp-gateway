@@ -11,7 +11,7 @@ gateway:
     registry: ghcr.io/OWNER # replace OWNER with the GitHub user/org
   replicas: 2 # stateless MCP endpoint: any replica can serve any request
   resources:
-    requests: { cpu: 200m, memory: 256Mi }
+    requests: { cpu: 200m, memory: 384Mi }
     limits: { cpu: "2", memory: 1Gi }
 
 dashboard:

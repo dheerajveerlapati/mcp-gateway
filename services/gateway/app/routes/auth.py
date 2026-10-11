@@ -33,6 +33,11 @@ class AcceptInviteRequest(BaseModel):
     password: str = Field(min_length=8)
 
 
+class ChangePasswordRequest(BaseModel):
+    current_password: str
+    new_password: str = Field(min_length=8)
+
+
 class Me(BaseModel):
     id: int
     email: str
@@ -74,6 +79,17 @@ async def logout(response: Response) -> None:
 @router.get("/me")
 async def me(user: User = Depends(current_user)) -> Me:
     return to_me(user)
+
+
+@router.post("/password", status_code=204)
+async def change_password(body: ChangePasswordRequest, user: User = Depends(current_user),
+                          db: AsyncSession = Depends(get_db)) -> None:
+    # Asking for the current password means a stolen, still-open session
+    # cannot lock the real owner out.
+    if not verify_password(user.password_hash, body.current_password):
+        raise HTTPException(400, "Your current password is not correct.")
+    user.password_hash = hash_password(body.new_password)  # same db session as current_user
+    await db.commit()
 
 
 async def find_invite(db: AsyncSession, token: str) -> User:

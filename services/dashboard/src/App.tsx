@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react'
 import { NavLink, Navigate, Route, Routes } from 'react-router'
 import { api, type Me } from './api'
+import Account from './pages/Account'
 import Audit from './pages/Audit'
+import Chat from './pages/Chat'
 import Keys from './pages/Keys'
 import Login from './pages/Login'
 import Servers from './pages/Servers'
@@ -33,21 +35,25 @@ export default function App() {
       <header className="topbar">
         <strong>MCP Gateway</strong>
         <nav>
+          <NavLink to="/chat">Chat</NavLink>
           <NavLink to="/" end>Servers</NavLink>
           {me.role === 'admin' && <NavLink to="/team">Team</NavLink>}
           <NavLink to="/keys">API keys</NavLink>
           <NavLink to="/audit">Audit log</NavLink>
         </nav>
         <span className="muted">
-          {me.name} ({me.role}) <button className="link" onClick={logout}>Log out</button>
+          <NavLink to="/account">{me.name}</NavLink> ({me.role}){' '}
+          <button className="link" onClick={logout}>Log out</button>
         </span>
       </header>
       <main>
         <Routes>
           <Route path="/" element={<Servers />} />
+          <Route path="/chat" element={<Chat />} />
           {me.role === 'admin' && <Route path="/team" element={<Team />} />}
           <Route path="/keys" element={<Keys />} />
           <Route path="/audit" element={<Audit />} />
+          <Route path="/account" element={<Account />} />
           <Route path="*" element={<Navigate to="/" />} />
         </Routes>
       </main>
