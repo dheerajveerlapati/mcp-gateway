@@ -35,13 +35,17 @@ OrderStatus = Literal["pending", "processing", "on-hold", "completed", "cancelle
 
 # ---------- Products ----------
 
+# List tools return {"count": n, "<items>": [...]} rather than a bare list:
+# an empty list would reach the model as an empty answer, and models then
+# retry because they cannot tell "nothing found" from "something broke".
+
 @mcp.tool(annotations=READ_ONLY)
-async def list_products(search: str | None = None, page: int = 1, per_page: int = 20) -> list[dict]:
+async def list_products(search: str | None = None, page: int = 1, per_page: int = 20) -> dict:
     """List products in the store, newest first. Optionally filter by a search term."""
     products = await call_store(store.get("/products", {
         "search": search, "page": page, "per_page": limit(per_page), "orderby": "date", "order": "desc",
     }))
-    return [product_summary(p) for p in products]
+    return {"count": len(products), "products": [product_summary(p) for p in products]}
 
 
 @mcp.tool()
@@ -62,7 +66,7 @@ async def list_orders(
     status: OrderStatus | None = None,
     page: int = 1,
     per_page: int = 20,
-) -> list[dict]:
+) -> dict:
     """List orders, newest first.
 
     date_from / date_to are days in YYYY-MM-DD format (store time zone), both inclusive.
@@ -75,7 +79,7 @@ async def list_orders(
         "page": page,
         "per_page": limit(per_page),
     }))
-    return [order_summary(o) for o in orders]
+    return {"count": len(orders), "orders": [order_summary(o) for o in orders]}
 
 
 @mcp.tool(annotations=READ_ONLY)
