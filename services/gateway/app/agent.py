@@ -6,8 +6,9 @@ How it works, in one request:
    an external MCP client would. So the agent gets the same tools, the same
    checks, and its calls land in the audit log under the user, as "chat".
    It never talks to an upstream server directly.
-3. Turn each MCP tool into a LangChain tool and run a deepagents agent
-   (Gemini) over the conversation.
+3. Turn each MCP tool into a LangChain tool and run a deepagents agent over
+   the conversation. The model provider (Groq by default, or Gemini) is a
+   Helm setting: switching is a config change, not a code change.
 4. Stream what happens to the browser: each tool call, its result, and the
    final answer.
 
@@ -25,9 +26,9 @@ from zoneinfo import ZoneInfo
 import httpx2
 from deepagents import create_deep_agent
 from deepagents.profiles import HarnessProfile, register_harness_profile
+from langchain.chat_models import init_chat_model
 from langchain_core.messages import AIMessage, ToolMessage
 from langchain_core.tools import StructuredTool
-from langchain_google_genai import ChatGoogleGenerativeAI
 from mcp import Client
 from mcp.client.streamable_http import streamable_http_client
 from mcp_types import Tool
@@ -42,7 +43,9 @@ GATEWAY_MCP_URL = "http://127.0.0.1:8000/mcp"
 GATEWAY_ONLY = HarnessProfile(excluded_tools=frozenset({
     "ls", "read_file", "write_file", "edit_file", "delete", "glob", "grep", "execute", "task",
 }))
-register_harness_profile("google_genai", GATEWAY_ONLY)
+# deepagents picks the profile by model provider, so register it for each one we support.
+for provider in ("groq", "google_genai"):
+    register_harness_profile(provider, GATEWAY_ONLY)
 
 SYSTEM_PROMPT = """You are the team assistant for a WooCommerce shop.
 You can only act through the tools you are given; each tool name starts with
@@ -92,11 +95,12 @@ async def run_chat(user: User, messages: list[dict]) -> AsyncIterator[dict]:
             {"type": "answer", "content"}
             {"type": "error", "content"}
     """
-    if not settings.gemini_api_key:
+    if not settings.llm_api_key:
         yield {"type": "error", "content": "The chat is not configured: no LLM API key in the cluster."}
         return
 
-    model = ChatGoogleGenerativeAI(model=settings.llm_model, api_key=settings.gemini_api_key, temperature=0)
+    model = init_chat_model(settings.llm_model, model_provider=settings.llm_provider,
+                            api_key=settings.llm_api_key, temperature=0)
     today = datetime.now(ZoneInfo(settings.timezone)).strftime("%A %Y-%m-%d %H:%M")
     prompt = SYSTEM_PROMPT.format(today=today, timezone=settings.timezone, name=user.name, role=user.role)
 

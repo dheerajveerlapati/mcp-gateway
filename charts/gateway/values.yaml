@@ -35,10 +35,12 @@ gateway:
     limits: { cpu: "1", memory: 768Mi }
 
 # Chat agent model. The API key lives in its own Secret, created by hand:
-#   kubectl -n gateway create secret generic llm-secrets --from-literal=gemini-api-key=...
+#   kubectl -n gateway create secret generic llm-secrets --from-literal=api-key=...
 # Without it everything works except the chat, which says it is not configured.
+# To use Gemini instead: provider google_genai, model gemini-3.5-flash.
 llm:
-  model: gemini-3.5-flash
+  provider: groq
+  model: openai/gpt-oss-120b
   existingSecret: llm-secrets
 
 dashboard:

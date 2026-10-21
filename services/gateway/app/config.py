@@ -38,9 +38,10 @@ class Settings:
     # How often every upstream is checked (status + tool list).
     health_interval_seconds: float
 
-    # Chat agent. Without an API key the chat says it is not configured.
-    gemini_api_key: str
+    # Chat agent model. Without an API key the chat says it is not configured.
+    llm_provider: str  # a LangChain provider name: "groq" or "google_genai"
     llm_model: str
+    llm_api_key: str
     # Time zone the agent uses for "today".
     timezone: str
 
@@ -57,8 +58,9 @@ def load_settings() -> Settings:
         woo_mcp_token=os.environ.get("WOO_MCP_TOKEN", ""),
         upstream_timeout_seconds=float(os.environ.get("UPSTREAM_TIMEOUT_SECONDS", "15")),
         health_interval_seconds=float(os.environ.get("HEALTH_INTERVAL_SECONDS", "10")),
-        gemini_api_key=os.environ.get("GEMINI_API_KEY", ""),
-        llm_model=os.environ.get("LLM_MODEL", "gemini-3.5-flash"),
+        llm_provider=os.environ.get("LLM_PROVIDER", "groq"),
+        llm_model=os.environ.get("LLM_MODEL", "openai/gpt-oss-120b"),
+        llm_api_key=os.environ.get("LLM_API_KEY", ""),
         timezone=os.environ.get("TIMEZONE", "Asia/Kolkata"),
     )
 
