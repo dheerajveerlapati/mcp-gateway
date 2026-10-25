@@ -33,6 +33,11 @@ spec:
       labels:
         {{- include "gateway.labels" . | nindent 8 }}
         app.kubernetes.io/name: gateway
+      annotations:
+        # For a Prometheus in the cluster; /metrics is not routed by the Ingress.
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8000"
+        prometheus.io/path: /metrics
     spec:
       automountServiceAccountToken: false # it never talks to the Kubernetes API
       securityContext:

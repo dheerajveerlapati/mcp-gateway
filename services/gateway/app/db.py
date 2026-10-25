@@ -3,13 +3,14 @@
 users      who is on the team, and their role
 api_keys   each user's keys for MCP clients (only a hash is stored)
 servers    the registered upstream MCP servers (credential stored encrypted)
+tool_permissions  admin overrides of who may use a tool
 audit_log  one row per tool call
 """
 
 from datetime import datetime
 
-from sqlalchemy import DateTime, ForeignKey, String, Text, func
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy import DateTime, ForeignKey, Index, String, Text, func
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 from app.config import settings
@@ -70,8 +71,20 @@ class Server(Base):
     updated_at: Mapped[datetime] = mapped_column(server_default=func.now(), onupdate=func.now())
 
 
+class ToolPermission(Base):
+    """An admin's override of who may use one tool (see app/permissions.py)."""
+
+    __tablename__ = "tool_permissions"
+
+    server_id: Mapped[int] = mapped_column(ForeignKey("servers.id", ondelete="CASCADE"), primary_key=True)
+    tool_name: Mapped[str] = mapped_column(String(100), primary_key=True)  # the upstream's name, unprefixed
+    access: Mapped[str] = mapped_column(String(10))  # "everyone" or "admins"
+
+
 class AuditLog(Base):
     __tablename__ = "audit_log"
+    # The rate limit counts one user's calls in the last minute: this index makes that cheap.
+    __table_args__ = (Index("ix_audit_log_user_time", "user_id", "created_at"),)
 
     id: Mapped[int] = mapped_column(primary_key=True)
     created_at: Mapped[datetime] = mapped_column(server_default=func.now(), index=True)

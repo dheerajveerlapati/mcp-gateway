@@ -5,7 +5,8 @@ import logging
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
+from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 from sqlalchemy import func, select, text
 from starlette.routing import Route
 
@@ -17,7 +18,8 @@ from app.security import encrypt, hash_password
 from app.upstreams import upstreams
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
-logging.getLogger("httpx").setLevel(logging.WARNING)  # it logs every upstream URL
+for noisy in ("httpx", "httpx2"):  # they log every upstream request URL
+    logging.getLogger(noisy).setLevel(logging.WARNING)
 log = logging.getLogger("gateway")
 
 
@@ -59,6 +61,12 @@ app.include_router(keys.router)
 app.include_router(servers.router)
 app.include_router(audit.router)
 app.include_router(chat.router)
+
+
+@app.get("/metrics", include_in_schema=False)
+async def metrics():
+    """Prometheus metrics. Only reachable inside the cluster (no Ingress route)."""
+    return Response(generate_latest(), media_type=CONTENT_TYPE_LATEST)
 
 
 @app.get("/healthz", include_in_schema=False)

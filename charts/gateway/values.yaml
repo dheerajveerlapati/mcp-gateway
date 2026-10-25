@@ -30,6 +30,11 @@ gateway:
   healthIntervalSeconds: 10
   # Time zone the chat agent uses for "today".
   timezone: Asia/Kolkata
+  # SSRF guard: in-cluster hosts admins may register. Any other server URL
+  # must resolve to a public address.
+  allowedInternalHosts: ["*.mcp", "*.mcp.svc.cluster.local"]
+  # Tool calls per user per minute (shared across replicas: counted in Postgres).
+  rateLimitPerMinute: 60
   resources:
     requests: { cpu: 100m, memory: 256Mi }
     limits: { cpu: "1", memory: 768Mi }

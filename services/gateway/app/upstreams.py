@@ -31,7 +31,9 @@ from sqlalchemy import select
 
 from app.config import settings
 from app.db import Server, Session
+from app.metrics import UPSTREAM_UP
 from app.security import decrypt
+from app.url_safety import check_url
 
 log = logging.getLogger("gateway.upstreams")
 
@@ -102,6 +104,7 @@ class Upstreams:
         now = datetime.now(UTC)
         if not server.enabled:
             self.states[server.id] = UpstreamState(status="disabled", checked_at=now)
+            UPSTREAM_UP.labels(server.name).set(0)
             return
         try:
             async with asyncio.timeout(HEALTH_CHECK_TIMEOUT):
@@ -111,12 +114,14 @@ class Upstreams:
             if self.state(server.id).status != "unreachable":
                 log.warning("Upstream %s is unreachable: %s", server.name, reason)
             self.states[server.id] = UpstreamState(status="unreachable", error=reason, checked_at=now)
+            UPSTREAM_UP.labels(server.name).set(0)
             return
 
         usable = [t for t in tools if VALID_TOOL_NAME.match(f"{server.name}{SEPARATOR}{t.name}")]
         skipped = [t.name for t in tools if t not in usable]
         self.states[server.id] = UpstreamState(status="connected", tools=usable, skipped_tools=skipped,
                                                checked_at=now)
+        UPSTREAM_UP.labels(server.name).set(1)
 
     async def _list_tools(self, server: Server) -> list[Tool]:
         tools: list[Tool] = []
@@ -151,6 +156,8 @@ async def connect(server: Server):
     This is the only place an upstream credential is decrypted, and it only
     ever goes to that server - never to the browser or an MCP client.
     """
+    await check_url(server.url)  # re-checked every time: DNS can change (SSRF guard)
+
     headers = {}
     if server.credential_encrypted and server.auth_type == "bearer":
         headers["Authorization"] = f"Bearer {decrypt(server.credential_encrypted)}"

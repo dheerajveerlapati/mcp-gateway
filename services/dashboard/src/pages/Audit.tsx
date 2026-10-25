@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { api, type AuditRow } from '../api'
+import { api, type AuditRow, type ServerStats } from '../api'
 import { useMe } from '../session'
 import { ErrorText, StatusBadge, formatTime, messageOf } from '../ui'
 
@@ -35,6 +35,7 @@ export default function Audit() {
   return (
     <>
       <h1>Audit log</h1>
+      {me.role === 'admin' && <ServerStatsTable />}
       <div className="row filters">
         <input value={server} onChange={e => setServer(e.target.value)} placeholder="server, e.g. woo" />
         <select value={outcome} onChange={e => setOutcome(e.target.value)}>
@@ -72,5 +73,41 @@ export default function Audit() {
         </table>
       </section>
     </>
+  )
+}
+
+// Calls, error rate and latency per server over the last 24 hours (admins).
+function ServerStatsTable() {
+  const [stats, setStats] = useState<ServerStats[]>([])
+
+  useEffect(() => {
+    const load = () => api<ServerStats[]>('/api/audit/stats').then(setStats).catch(() => setStats([]))
+    load()
+    const timer = setInterval(load, 10000)
+    return () => clearInterval(timer)
+  }, [])
+
+  return (
+    <section className="card">
+      <h2>Last 24 hours by server</h2>
+      <table>
+        <thead>
+          <tr><th>Server</th><th>Calls</th><th>Not ok</th><th>Error rate</th><th>Avg</th><th>p95</th></tr>
+        </thead>
+        <tbody>
+          {stats.map(s => (
+            <tr key={s.server_name}>
+              <td>{s.server_name}</td>
+              <td>{s.calls}</td>
+              <td>{s.errors}</td>
+              <td>{Math.round(s.error_rate * 100)}%</td>
+              <td>{s.avg_ms} ms</td>
+              <td>{s.p95_ms} ms</td>
+            </tr>
+          ))}
+          {stats.length === 0 && <tr><td colSpan={6} className="muted">No calls yet.</td></tr>}
+        </tbody>
+      </table>
+    </section>
   )
 }

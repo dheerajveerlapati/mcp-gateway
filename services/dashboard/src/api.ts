@@ -42,7 +42,13 @@ function errorMessage(data: { detail?: unknown }): string {
 
 export type Me = { id: number; email: string; name: string; role: 'admin' | 'member' }
 
-export type Tool = { name: string; description: string | null }
+export type Tool = {
+  name: string
+  description: string | null
+  read_only: boolean
+  access: 'everyone' | 'admins'
+  overridden: boolean
+}
 
 export type Server = {
   id: number
@@ -88,4 +94,13 @@ export type AuditRow = {
   duration_ms: number
   outcome: 'ok' | 'error' | 'timeout' | 'denied'
   error: string | null
+}
+
+export type ServerStats = {
+  server_name: string
+  calls: number
+  errors: number
+  error_rate: number
+  avg_ms: number
+  p95_ms: number
 }

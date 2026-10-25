@@ -36,6 +36,8 @@ export default function Servers() {
     }
   }
 
+  const setAccess = (s: Server, tool: string, access: string) =>
+    run(() => api(`/api/servers/${s.id}/tools/${encodeURIComponent(tool)}/access`, { method: 'PUT', body: { access } }))
   const toggle = (s: Server) => run(() => api(`/api/servers/${s.id}`, { method: 'PATCH', body: { enabled: !s.enabled } }))
   const remove = (s: Server) => {
     if (confirm(`Remove server "${s.name}"? Its tools disappear for everyone.`)) {
@@ -81,9 +83,27 @@ export default function Servers() {
           {s.tools.length > 0 && (
             <details>
               <summary>{s.tools.length} tools</summary>
+              <p className="muted">
+                Read-only tools are for everyone; tools that change things are admin-only unless an admin allows them.
+              </p>
               <ul className="tools">
                 {s.tools.map(t => (
-                  <li key={t.name}><code>{s.name}__{t.name}</code> <span className="muted">{t.description}</span></li>
+                  <li key={t.name}>
+                    <code>{s.name}__{t.name}</code>{' '}
+                    {me.role === 'admin' ? (
+                      <select
+                        value={t.overridden ? t.access : 'default'}
+                        onChange={e => setAccess(s, t.name, e.target.value)}
+                      >
+                        <option value="default">default ({t.read_only ? 'everyone' : 'admins'})</option>
+                        <option value="everyone">everyone</option>
+                        <option value="admins">admins only</option>
+                      </select>
+                    ) : (
+                      <span className={`badge badge-${t.access === 'everyone' ? 'ok' : 'disabled'}`}>{t.access}</span>
+                    )}{' '}
+                    <span className="muted">{t.description}</span>
+                  </li>
                 ))}
               </ul>
             </details>

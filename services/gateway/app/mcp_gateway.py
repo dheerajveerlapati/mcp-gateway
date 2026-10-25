@@ -17,15 +17,19 @@ import logging
 import time
 from contextvars import ContextVar
 from dataclasses import dataclass
+from datetime import UTC, datetime, timedelta
 
 from mcp.server import Server
 from mcp.server.streamable_http_manager import StreamableHTTPSessionManager
-from mcp_types import CallToolRequestParams, CallToolResult, ListToolsResult, TextContent
-from sqlalchemy import select
+from mcp_types import CallToolRequestParams, CallToolResult, ListToolsResult, TextContent, Tool
+from sqlalchemy import func, select
 from starlette.responses import JSONResponse
 
 from app.auth import check_api_key
+from app.config import settings
+from app.metrics import TOOL_CALL_SECONDS, TOOL_CALLS
 from app.db import AuditLog, Server as ServerRow, Session, User
+from app.permissions import access_for, load_overrides, may_use
 from app.security import API_KEY_PREFIX, CHAT_AUDIENCE, read_token
 from app.upstreams import SEPARATOR, UpstreamCallError, upstreams
 
@@ -46,19 +50,26 @@ current_caller: ContextVar[Caller] = ContextVar("current_caller")
 # ---------- MCP handlers ----------
 
 async def list_tools(ctx, params) -> ListToolsResult:
-    """Tools of every enabled, reachable server, with prefixed names."""
+    return ListToolsResult(tools=await visible_tools(current_caller.get()))
+
+
+async def visible_tools(caller: Caller) -> list[Tool]:
+    """Tools of every enabled, reachable server that this caller may use, prefixed."""
+    overrides = await load_overrides()
     tools = []
     for server in await enabled_servers():
         state = upstreams.state(server.id)
         if state.status != "connected":
             continue  # a dead server simply contributes no tools
         for tool in state.tools:
+            if not may_use(caller.user.role, access_for(server.id, tool.name, tool, overrides)):
+                continue  # hidden: this role may not use it
             tools.append(tool.model_copy(update={
                 "name": f"{server.name}{SEPARATOR}{tool.name}",
                 # Tell the model (and the person reading) where the tool comes from.
                 "description": f"[{server.name}] {tool.description or ''}".strip(),
             }))
-    return ListToolsResult(tools=tools)
+    return tools
 
 
 async def call_tool(ctx, params: CallToolRequestParams) -> CallToolResult:
@@ -72,6 +83,13 @@ async def call_tool(ctx, params: CallToolRequestParams) -> CallToolResult:
         result, outcome = error_result(f"Unknown tool '{params.name}'."), "error"
     elif not server.enabled:
         result, outcome = error_result(f"Server '{server_name}' is disabled by an admin."), "denied"
+    elif not await caller_may_use(caller, server, tool_name):
+        result = error_result(f"Your role ({caller.user.role}) may not use {params.name}. Ask an admin.")
+        outcome = "denied"
+    elif await over_rate_limit(caller.user):
+        result = error_result(f"Rate limit: at most {settings.rate_limit_per_minute} tool calls per minute. "
+                              "Try again in a moment.")
+        outcome = "denied"
     else:
         try:
             result = await upstreams.call_tool(server, tool_name, params.arguments or {})
@@ -80,9 +98,12 @@ async def call_tool(ctx, params: CallToolRequestParams) -> CallToolResult:
             result = error_result(str(error))
             outcome = "timeout" if error.timed_out else "error"
 
+    seconds = time.monotonic() - started
+    TOOL_CALLS.labels(server_name or "-", outcome).inc()
+    TOOL_CALL_SECONDS.labels(server_name or "-").observe(seconds)
     await write_audit(
         caller.user, caller.source, server_name or "-", tool_name or params.name,
-        duration_ms=int((time.monotonic() - started) * 1000), outcome=outcome,
+        duration_ms=int(seconds * 1000), outcome=outcome,
         error=result.content[0].text if outcome != "ok" and result.content else None,
     )
     return result
@@ -168,6 +189,28 @@ async def audit_refusal(user: User, reason: str, receive) -> None:
 
 
 # ---------- Helpers ----------
+
+async def over_rate_limit(user: User) -> bool:
+    """Count this user's tool calls in the last minute, from the audit log.
+
+    The count lives in Postgres, so the limit holds across all gateway
+    replicas (an in-memory counter would allow N x the limit with N replicas).
+    """
+    since = datetime.now(UTC) - timedelta(minutes=1)
+    async with Session() as db:
+        recent = await db.scalar(
+            select(func.count()).select_from(AuditLog)
+            .where(AuditLog.user_id == user.id, AuditLog.created_at > since)
+        )
+    return recent >= settings.rate_limit_per_minute
+
+
+async def caller_may_use(caller: Caller, server: ServerRow, tool_name: str) -> bool:
+    """The same rule as the tool list, checked again because a client can call
+    a tool by name without ever having been shown it."""
+    tool = next((t for t in upstreams.state(server.id).tools if t.name == tool_name), None)
+    return may_use(caller.user.role, access_for(server.id, tool_name, tool, await load_overrides()))
+
 
 async def enabled_servers() -> list[ServerRow]:
     # Read from the database on every request, so disabling or removing a

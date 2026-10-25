@@ -38,6 +38,12 @@ class Settings:
     # How often every upstream is checked (status + tool list).
     health_interval_seconds: float
 
+    # In-cluster hosts an admin may register (SSRF guard, see url_safety.py),
+    # as patterns such as "*.mcp". Every other URL must be a public address.
+    allowed_internal_hosts: tuple[str, ...]
+    # Tool calls one user may make per minute, across all gateway replicas.
+    rate_limit_per_minute: int
+
     # Chat agent model. Without an API key the chat says it is not configured.
     llm_provider: str  # a LangChain provider name: "groq" or "google_genai"
     llm_model: str
@@ -58,6 +64,11 @@ def load_settings() -> Settings:
         woo_mcp_token=os.environ.get("WOO_MCP_TOKEN", ""),
         upstream_timeout_seconds=float(os.environ.get("UPSTREAM_TIMEOUT_SECONDS", "15")),
         health_interval_seconds=float(os.environ.get("HEALTH_INTERVAL_SECONDS", "10")),
+        allowed_internal_hosts=tuple(
+            p.strip() for p in os.environ.get("ALLOWED_INTERNAL_HOSTS", "*.mcp,*.mcp.svc.cluster.local").split(",")
+            if p.strip()
+        ),
+        rate_limit_per_minute=int(os.environ.get("RATE_LIMIT_PER_MINUTE", "60")),
         llm_provider=os.environ.get("LLM_PROVIDER", "groq"),
         llm_model=os.environ.get("LLM_MODEL", "openai/gpt-oss-120b"),
         llm_api_key=os.environ.get("LLM_API_KEY", ""),

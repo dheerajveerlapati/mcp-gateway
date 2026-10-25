@@ -25,8 +25,11 @@ spec:
     - host: {{ .Values.host }}
       http:
         paths:
+          # Prefix, not Exact: Traefik ranks rules by their length, and
+          # "Path(`/mcp`)" is shorter than the dashboard's "PathPrefix(`/`)",
+          # so an Exact rule would lose and /mcp would go to the dashboard.
           - path: /mcp
-            pathType: Exact
+            pathType: Prefix
             backend:
               service:
                 name: {{ .Release.Name }}
