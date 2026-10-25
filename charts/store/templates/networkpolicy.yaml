@@ -1,5 +1,17 @@
 {{- if .Values.networkPolicy.enabled }}
-# Only WordPress and the setup Job may open connections to the database.
+# Deny by default: every pod in the namespace gets no traffic in or out,
+# except what the policies below allow.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ .Release.Name }}-default-deny
+  labels:
+    {{- include "store.labels" . | nindent 4 }}
+spec:
+  podSelector: {}
+  policyTypes: [Ingress, Egress]
+---
+# MariaDB: only WordPress and the setup Job may connect; it connects to no one.
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
@@ -48,4 +60,46 @@ spec:
         {{- end }}
       ports:
         - port: 80
+---
+# Outbound for WordPress and the setup Job: DNS, the database, and the public
+# internet on 80/443 (plugin and theme downloads, WooCommerce update checks).
+# Private address ranges are excluded, so they cannot reach other cluster services.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ .Release.Name }}-wordpress-egress
+  labels:
+    {{- include "store.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchExpressions:
+      - key: app.kubernetes.io/name
+        operator: In
+        values: [wordpress, store-setup]
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - { port: 53, protocol: UDP }
+        - { port: 53, protocol: TCP }
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/instance: {{ .Release.Name }}
+              app.kubernetes.io/name: mariadb
+      ports:
+        - port: 3306
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except: [10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, 169.254.0.0/16, 100.64.0.0/10]
+      ports:
+        - port: 80
+        - port: 443
 {{- end }}

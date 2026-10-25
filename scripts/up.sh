@@ -47,7 +47,9 @@ build_image gateway
 GATEWAY_TAG=$TAG
 build_image dashboard
 DASHBOARD_TAG=$TAG
-helm upgrade --install gateway charts/gateway --namespace gateway \
+# --force-conflicts: the Helm values are the source of truth, even if someone
+# changed a field by hand (e.g. kubectl scale), which would otherwise block this.
+helm upgrade --install gateway charts/gateway --namespace gateway --force-conflicts \
   -f charts/gateway/values-local.yaml \
   --set gateway.image.tag="$GATEWAY_TAG" --set dashboard.image.tag="$DASHBOARD_TAG" \
   --wait --timeout 5m

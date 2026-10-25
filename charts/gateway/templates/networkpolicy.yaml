@@ -1,4 +1,16 @@
 {{- if .Values.networkPolicy.enabled }}
+# Deny by default: every pod in the namespace gets no traffic in or out,
+# except what the policies below allow.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ .Release.Name }}-default-deny
+  labels:
+    {{- include "gateway.labels" . | nindent 4 }}
+spec:
+  podSelector: {}
+  policyTypes: [Ingress, Egress]
+---
 # Gateway firewall.
 #  in:  only from the ingress controller (all public traffic comes through it)
 #  out: DNS, its own Postgres, the in-cluster MCP servers, and HTTPS to the

@@ -55,9 +55,23 @@ spec:
         {{- include "store.labels" . | nindent 8 }}
         app.kubernetes.io/name: wordpress
     spec:
+      automountServiceAccountToken: false
+      securityContext:
+        # Run Apache/PHP as www-data (33), not root. Binding port 80 normally
+        # needs root; this namespaced, "safe" sysctl lets this pod's
+        # unprivileged user bind it instead.
+        runAsNonRoot: true
+        runAsUser: 33
+        runAsGroup: 33
+        seccompProfile: { type: RuntimeDefault }
+        sysctls:
+          - { name: net.ipv4.ip_unprivileged_port_start, value: "0" }
       containers:
         - name: wordpress
           image: {{ .Values.wordpress.image }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities: { drop: [ALL] }
           env:
             {{- include "store.dbEnv" . | nindent 12 }}
             # Behind the ingress, TLS ends at Traefik. Trust the forwarded scheme
