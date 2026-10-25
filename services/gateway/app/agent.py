@@ -40,6 +40,9 @@ from app.security import CHAT_AUDIENCE, create_token
 # The gateway's own MCP endpoint, inside this same pod.
 GATEWAY_MCP_URL = "http://127.0.0.1:8000/mcp"
 
+# Above this many tools the agent gets the two search-mode tools instead.
+MANY_TOOLS = 30
+
 GATEWAY_ONLY = HarnessProfile(excluded_tools=frozenset({
     "ls", "read_file", "write_file", "edit_file", "delete", "glob", "grep", "execute", "task",
 }))
@@ -63,11 +66,12 @@ Rules:
 
 
 @asynccontextmanager
-async def gateway_client(user: User):
+async def gateway_client(user: User, search_mode: bool = False):
     """An MCP connection to our own gateway, acting as `user`."""
     token = create_token(user.id, CHAT_AUDIENCE, timedelta(minutes=10))
+    url = GATEWAY_MCP_URL + ("?tools=search" if search_mode else "")
     async with httpx2.AsyncClient(headers={"Authorization": f"Bearer {token}"}, timeout=None) as http:
-        async with Client(streamable_http_client(GATEWAY_MCP_URL, http_client=http)) as client:
+        async with Client(streamable_http_client(url, http_client=http)) as client:
             yield client
 
 
@@ -105,8 +109,14 @@ async def run_chat(user: User, messages: list[dict]) -> AsyncIterator[dict]:
     prompt = SYSTEM_PROMPT.format(today=today, timezone=settings.timezone, name=user.name, role=user.role)
 
     try:
+        # Fetched per request, so a server disabled a second ago is already gone.
         async with gateway_client(user) as client:
-            # Fetched per request, so a server disabled a second ago is already gone.
+            tool_count = len((await client.list_tools()).tools)
+        # Too many tools to hand to the model at once: use search mode, where it
+        # gets search + call tools instead (same checks and audit; tool_search.py).
+        search_mode = tool_count > MANY_TOOLS
+
+        async with gateway_client(user, search_mode) as client:
             mcp_tools = (await client.list_tools()).tools
             agent = create_deep_agent(model=model, tools=[as_langchain_tool(client, t) for t in mcp_tools],
                                       system_prompt=prompt)

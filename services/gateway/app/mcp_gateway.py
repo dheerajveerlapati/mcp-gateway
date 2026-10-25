@@ -18,6 +18,7 @@ import time
 from contextvars import ContextVar
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
+from urllib.parse import parse_qs
 
 from mcp.server import Server
 from mcp.server.streamable_http_manager import StreamableHTTPSessionManager
@@ -31,6 +32,7 @@ from app.metrics import TOOL_CALL_SECONDS, TOOL_CALLS
 from app.db import AuditLog, Server as ServerRow, Session, User
 from app.permissions import access_for, load_overrides, may_use
 from app.security import API_KEY_PREFIX, CHAT_AUDIENCE, read_token
+from app.tool_search import CALL_TOOL, META_TOOLS, SEARCH_TOOL, search
 from app.upstreams import SEPARATOR, UpstreamCallError, upstreams
 
 log = logging.getLogger("gateway.mcp")
@@ -40,6 +42,7 @@ log = logging.getLogger("gateway.mcp")
 class Caller:
     user: User
     source: str  # "api_key" (an MCP client) or "chat" (the dashboard chat agent)
+    search_mode: bool = False  # connected to /mcp?tools=search (see tool_search.py)
 
 
 # The authenticated caller of the request being handled. Set by McpEndpoint,
@@ -50,7 +53,10 @@ current_caller: ContextVar[Caller] = ContextVar("current_caller")
 # ---------- MCP handlers ----------
 
 async def list_tools(ctx, params) -> ListToolsResult:
-    return ListToolsResult(tools=await visible_tools(current_caller.get()))
+    caller = current_caller.get()
+    if caller.search_mode:
+        return ListToolsResult(tools=META_TOOLS)
+    return ListToolsResult(tools=await visible_tools(caller))
 
 
 async def visible_tools(caller: Caller) -> list[Tool]:
@@ -73,18 +79,31 @@ async def visible_tools(caller: Caller) -> list[Tool]:
 
 
 async def call_tool(ctx, params: CallToolRequestParams) -> CallToolResult:
-    """Route "<server>__<tool>" to the right upstream and audit the call."""
     caller = current_caller.get()
+    arguments = params.arguments or {}
+
+    # The two search-mode tools (available in both modes once known).
+    if params.name == SEARCH_TOOL:
+        found = search(await visible_tools(caller), str(arguments.get("query", "")), int(arguments.get("limit", 8)))
+        return CallToolResult(content=[TextContent(type="text", text=found)])
+    if params.name == CALL_TOOL:
+        return await route_call(caller, str(arguments.get("name", "")), arguments.get("arguments") or {})
+
+    return await route_call(caller, params.name, arguments)
+
+
+async def route_call(caller: Caller, name: str, arguments: dict) -> CallToolResult:
+    """Route "<server>__<tool>" to the right upstream and audit the call."""
     started = time.monotonic()
-    server_name, separator, tool_name = params.name.partition(SEPARATOR)
+    server_name, separator, tool_name = name.partition(SEPARATOR)
 
     server = await find_server(server_name) if separator else None
     if server is None:
-        result, outcome = error_result(f"Unknown tool '{params.name}'."), "error"
+        result, outcome = error_result(f"Unknown tool '{name}'."), "error"
     elif not server.enabled:
         result, outcome = error_result(f"Server '{server_name}' is disabled by an admin."), "denied"
     elif not await caller_may_use(caller, server, tool_name):
-        result = error_result(f"Your role ({caller.user.role}) may not use {params.name}. Ask an admin.")
+        result = error_result(f"Your role ({caller.user.role}) may not use {name}. Ask an admin.")
         outcome = "denied"
     elif await over_rate_limit(caller.user):
         result = error_result(f"Rate limit: at most {settings.rate_limit_per_minute} tool calls per minute. "
@@ -92,7 +111,7 @@ async def call_tool(ctx, params: CallToolRequestParams) -> CallToolResult:
         outcome = "denied"
     else:
         try:
-            result = await upstreams.call_tool(server, tool_name, params.arguments or {})
+            result = await upstreams.call_tool(server, tool_name, arguments)
             outcome = "error" if result.is_error else "ok"
         except UpstreamCallError as error:
             result = error_result(str(error))
@@ -102,7 +121,7 @@ async def call_tool(ctx, params: CallToolRequestParams) -> CallToolResult:
     TOOL_CALLS.labels(server_name or "-", outcome).inc()
     TOOL_CALL_SECONDS.labels(server_name or "-").observe(seconds)
     await write_audit(
-        caller.user, caller.source, server_name or "-", tool_name or params.name,
+        caller.user, caller.source, server_name or "-", tool_name or name,
         duration_ms=int(seconds * 1000), outcome=outcome,
         error=result.content[0].text if outcome != "ok" and result.content else None,
     )
@@ -137,6 +156,7 @@ class McpEndpoint:
             await response(scope, receive, send)
             return
 
+        caller.search_mode = "search" in parse_qs(scope.get("query_string", b"").decode()).get("tools", [])
         current_caller.set(caller)
         await session_manager.handle_request(scope, receive, send)
 

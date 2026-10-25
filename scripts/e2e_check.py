@@ -14,6 +14,7 @@ Run (after scripts/up.sh, with the utils server registered):
 """
 
 import asyncio
+import json
 import os
 import sys
 import time
@@ -92,6 +93,21 @@ async def main(slow: bool) -> None:
     _, utils_pong = await call(key, "utils__ping")
     check("same tool name on two servers goes to the right one",
           "woocommerce" in woo_pong and "shop-utils" in utils_pong)
+
+    # Search mode (many tools): two meta-tools that find and run the others.
+    async def search_mode(c):
+        listed = [t.name for t in (await c.list_tools()).tools]
+        found = await c.call_tool("gateway__search_tools", {"query": "list orders"})
+        ran = await c.call_tool("gateway__call_tool", {"name": "utils__ping", "arguments": {}})
+        return listed, found.content[0].text, ran.content[0].text
+    http = httpx2.AsyncClient(headers={"Authorization": f"Bearer {key}"}, timeout=60)
+    async with Client(streamable_http_client(f"{BASE}/mcp?tools=search", http_client=http)) as client:
+        listed, found, ran = await search_mode(client)
+    check("search mode lists only the two meta-tools",
+          listed == ["gateway__search_tools", "gateway__call_tool"])
+    top = json.loads(found)["tools"][0]["name"] if json.loads(found)["count"] else None
+    check("search ranks the right tool first", top == "woo__list_orders", f"top: {top}")
+    check("gateway__call_tool runs the found tool", "shop-utils" in ran)
 
     # Permissions are enforced on calls too, not only on the list.
     ok, text = await call(key, "woo__create_product", {"name": "e2e", "price": 1})

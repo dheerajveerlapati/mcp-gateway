@@ -77,6 +77,8 @@ class CreateServer(BaseModel):
     def valid_name(cls, name: str) -> str:
         if not SERVER_NAME.match(name):
             raise ValueError("Use lowercase letters, digits and single underscores, e.g. shop_utils")
+        if name == "gateway":
+            raise ValueError('"gateway" is reserved for the gateway\'s own tools (gateway__search_tools)')
         return name
 
 
