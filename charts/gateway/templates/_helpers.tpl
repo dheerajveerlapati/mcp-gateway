@@ -46,6 +46,9 @@ helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version }}
 - { name: TIMEZONE, value: {{ .Values.gateway.timezone | quote }} }
 - { name: ALLOWED_INTERNAL_HOSTS, value: {{ join "," .Values.gateway.allowedInternalHosts | quote }} }
 - { name: RATE_LIMIT_PER_MINUTE, value: {{ .Values.gateway.rateLimitPerMinute | quote }} }
+- { name: HOSTED_ENABLED, value: {{ .Values.hosted.enabled | quote }} }
+- { name: HOSTED_NAMESPACE, value: {{ .Values.hosted.namespace | quote }} }
+- { name: GATEWAY_NAMESPACE, value: {{ .Release.Namespace | quote }} }
 - { name: LLM_PROVIDER, value: {{ .Values.llm.provider | quote }} }
 - { name: LLM_MODEL, value: {{ .Values.llm.model | quote }} }
 - name: LLM_API_KEY

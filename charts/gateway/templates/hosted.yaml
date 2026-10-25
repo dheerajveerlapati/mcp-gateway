@@ -1,0 +1,94 @@
+{{- if .Values.hosted.enabled }}
+# Hosted MCP servers: admins can add a server by container image and the
+# gateway runs it in this namespace (services/gateway/app/hosting.py).
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: {{ .Values.hosted.namespace }}
+  labels:
+    {{- include "gateway.labels" . | nindent 4 }}
+---
+# The gateway's identity towards the Kubernetes API.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ .Release.Name }}
+  labels:
+    {{- include "gateway.labels" . | nindent 4 }}
+---
+# Least privilege: exactly the four object kinds a hosted server needs, only in
+# the hosted namespace. No access to its own namespace, the store, or anything
+# cluster-wide; it cannot read other Secrets than the ones it manages there.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ .Release.Name }}-hosted-servers
+  namespace: {{ .Values.hosted.namespace }}
+  labels:
+    {{- include "gateway.labels" . | nindent 4 }}
+rules:
+  - apiGroups: [""]
+    resources: [secrets, services]
+    verbs: [get, create, patch, delete]
+  - apiGroups: [apps]
+    resources: [deployments]
+    verbs: [get, create, patch, delete]
+  - apiGroups: [networking.k8s.io]
+    resources: [networkpolicies]
+    verbs: [get, create, patch, delete]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ .Release.Name }}-hosted-servers
+  namespace: {{ .Values.hosted.namespace }}
+  labels:
+    {{- include "gateway.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ .Release.Name }}-hosted-servers
+subjects:
+  - kind: ServiceAccount
+    name: {{ .Release.Name }}
+    namespace: {{ .Release.Namespace }}
+---
+# Guardrails: hosted servers together can never use more than this.
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: hosted-servers
+  namespace: {{ .Values.hosted.namespace }}
+  labels:
+    {{- include "gateway.labels" . | nindent 4 }}
+spec:
+  hard:
+    {{- toYaml .Values.hosted.quota | nindent 4 }}
+---
+# Defaults and maximums for any container in the namespace.
+apiVersion: v1
+kind: LimitRange
+metadata:
+  name: hosted-servers
+  namespace: {{ .Values.hosted.namespace }}
+  labels:
+    {{- include "gateway.labels" . | nindent 4 }}
+spec:
+  limits:
+    - type: Container
+      default: { cpu: 500m, memory: 256Mi }
+      defaultRequest: { cpu: 50m, memory: 64Mi }
+      max: { cpu: "1", memory: 512Mi }
+---
+# Deny by default; each hosted server gets its own policy from the gateway.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny
+  namespace: {{ .Values.hosted.namespace }}
+  labels:
+    {{- include "gateway.labels" . | nindent 4 }}
+spec:
+  podSelector: {}
+  policyTypes: [Ingress, Egress]
+{{- end }}

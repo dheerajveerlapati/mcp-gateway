@@ -32,7 +32,7 @@ gateway:
   timezone: Asia/Kolkata
   # SSRF guard: in-cluster hosts admins may register. Any other server URL
   # must resolve to a public address.
-  allowedInternalHosts: ["*.mcp", "*.mcp.svc.cluster.local"]
+  allowedInternalHosts: ["*.mcp", "*.mcp.svc.cluster.local", "*.mcp-hosted", "*.mcp-hosted.svc.cluster.local"]
   # Tool calls per user per minute (shared across replicas: counted in Postgres).
   rateLimitPerMinute: 60
   resources:
@@ -47,6 +47,24 @@ llm:
   provider: groq
   model: openai/gpt-oss-120b
   existingSecret: llm-secrets
+
+# Hosted MCP servers: admins add a server by container image and the gateway
+# runs it in this namespace, with its own Secret, limits and NetworkPolicy.
+hosted:
+  enabled: true
+  namespace: mcp-hosted
+  # Limits for all hosted servers together.
+  quota:
+    pods: "10"
+    requests.cpu: "1"
+    requests.memory: 1Gi
+    limits.cpu: "4"
+    limits.memory: 4Gi
+  # Where the gateway reaches the Kubernetes API. k3s defaults: the
+  # "kubernetes" Service IP on 443, which forwards to the API server on 6443.
+  apiServerEgress:
+    - { cidr: 10.43.0.1/32, port: 443 }
+    - { cidr: 0.0.0.0/0, port: 6443 }
 
 dashboard:
   image:

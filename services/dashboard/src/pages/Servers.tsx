@@ -9,7 +9,7 @@ export default function Servers() {
   const me = useMe()
   const [servers, setServers] = useState<Server[]>([])
   const [error, setError] = useState<string | null>(null)
-  const [editing, setEditing] = useState<Server | 'new' | null>(null)
+  const [editing, setEditing] = useState<Server | 'new' | 'hosted' | null>(null)
 
   async function load() {
     try {
@@ -49,11 +49,17 @@ export default function Servers() {
     <>
       <div className="page-title">
         <h1>MCP servers</h1>
-        {me.role === 'admin' && <button onClick={() => setEditing('new')}>Add server</button>}
+        {me.role === 'admin' && (
+          <div className="row">
+            <button onClick={() => setEditing('new')}>Add by URL</button>
+            <button className="secondary" onClick={() => setEditing('hosted')}>Add by container image</button>
+          </div>
+        )}
       </div>
       <ErrorText error={error} />
 
-      {editing && (
+      {editing === 'hosted' && <HostedServerForm onDone={() => { setEditing(null); load() }} />}
+      {editing && editing !== 'hosted' && (
         <ServerForm
           server={editing === 'new' ? null : editing}
           onDone={() => { setEditing(null); load() }}
@@ -68,12 +74,13 @@ export default function Servers() {
             <span className="muted grow">{s.url}</span>
             {me.role === 'admin' && (
               <>
-                <button className="secondary" onClick={() => setEditing(s)}>Edit</button>
+                {!s.image && <button className="secondary" onClick={() => setEditing(s)}>Edit</button>}
                 <button className="secondary" onClick={() => toggle(s)}>{s.enabled ? 'Disable' : 'Enable'}</button>
                 <button className="danger" onClick={() => remove(s)}>Remove</button>
               </>
             )}
           </div>
+          {s.image && <p className="muted">Hosted in the cluster from image <code>{s.image}</code></p>}
           <p className="muted">
             Auth: {s.auth_type === 'none' ? 'none' : s.auth_type === 'bearer' ? 'bearer token' : `header ${s.auth_header}`}
             {s.has_credential && ' · credential stored (encrypted, never shown)'}
@@ -173,6 +180,65 @@ function ServerForm({ server, onDone }: { server: Server | null; onDone: () => v
       <ErrorText error={error} />
       <div className="row">
         <button type="submit">Save</button>
+        <button type="button" className="secondary" onClick={onDone}>Cancel</button>
+      </div>
+    </form>
+  )
+}
+
+// Run an MCP server image in the cluster. The gateway creates its Deployment,
+// Service, Secret and NetworkPolicy, and registers it.
+function HostedServerForm({ onDone }: { onDone: () => void }) {
+  const [name, setName] = useState('')
+  const [image, setImage] = useState('')
+  const [port, setPort] = useState('8000')
+  const [path, setPath] = useState('/mcp')
+  const [envText, setEnvText] = useState('')
+  const [error, setError] = useState<string | null>(null)
+  const [saving, setSaving] = useState(false)
+
+  async function submit(event: FormEvent) {
+    event.preventDefault()
+    // One KEY=value per line.
+    const env: Record<string, string> = {}
+    for (const line of envText.split('\n')) {
+      const [key, ...rest] = line.split('=')
+      if (key.trim()) env[key.trim()] = rest.join('=').trim()
+    }
+    setSaving(true)
+    try {
+      await api('/api/servers/hosted', { method: 'POST', body: { name, image, port: Number(port), path, env } })
+      onDone()
+    } catch (e) {
+      setError(messageOf(e))
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <form className="card" onSubmit={submit}>
+      <h2>Add an MCP server by container image</h2>
+      <p className="muted">
+        The gateway runs the image in the <code>mcp-hosted</code> namespace as a non-root container with CPU and memory
+        limits. Only the gateway can reach it. It must serve MCP over Streamable HTTP on the port and path below.
+      </p>
+      <label>Name (also the tool prefix)
+        <input value={name} onChange={e => setName(e.target.value)} placeholder="weather" required />
+      </label>
+      <label>Image
+        <input value={image} onChange={e => setImage(e.target.value)} placeholder="ghcr.io/owner/weather-mcp:1.0" required />
+      </label>
+      <div className="row">
+        <label>Port <input value={port} onChange={e => setPort(e.target.value)} required /></label>
+        <label>Path <input value={path} onChange={e => setPath(e.target.value)} required /></label>
+      </div>
+      <label>Environment variables, one KEY=value per line (stored in the server's own Secret)
+        <textarea rows={3} value={envText} onChange={e => setEnvText(e.target.value)} placeholder="API_KEY=..." />
+      </label>
+      <ErrorText error={error} />
+      <div className="row">
+        <button type="submit" disabled={saving}>{saving ? 'Deploying…' : 'Deploy'}</button>
         <button type="button" className="secondary" onClick={onDone}>Cancel</button>
       </div>
     </form>

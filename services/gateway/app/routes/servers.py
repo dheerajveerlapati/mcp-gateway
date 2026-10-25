@@ -13,7 +13,9 @@ from pydantic import AfterValidator, BaseModel, Field, field_validator
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app import hosting
 from app.auth import admin_user, current_user, get_db
+from app.config import settings
 from app.db import Server, ToolPermission
 from app.permissions import EVERYONE, access_for, default_access, load_overrides
 from app.security import encrypt
@@ -35,6 +37,18 @@ def require_http_url(url: str) -> str:
 
 
 ServerUrl = Annotated[str, Field(max_length=500), AfterValidator(require_http_url)]
+
+
+def require_server_name(name: str) -> str:
+    if not SERVER_NAME.match(name):
+        raise ValueError("Use lowercase letters, digits and single underscores, e.g. shop_utils")
+    if name == "gateway":
+        raise ValueError('"gateway" is reserved for the gateway\'s own tools (gateway__search_tools)')
+    return name
+
+
+ServerName = Annotated[str, Field(max_length=20), AfterValidator(require_server_name)]
+ENV_NAME = re.compile(r"^[A-Z_][A-Z0-9_]*$")
 
 
 class ToolOut(BaseModel):
@@ -62,24 +76,32 @@ class ServerOut(BaseModel):
     checked_at: datetime | None
     tools: list[ToolOut]
     skipped_tools: list[str]
+    image: str | None  # set for servers the gateway runs itself (hosted)
 
 
 class CreateServer(BaseModel):
-    name: str = Field(max_length=20)
+    name: ServerName
     url: ServerUrl
     auth_type: AuthType = "none"
     auth_header: str | None = Field(default=None, max_length=100)
     credential: str | None = None
     enabled: bool = True
 
-    @field_validator("name")
+
+class CreateHostedServer(BaseModel):
+    name: ServerName
+    image: str = Field(min_length=3, max_length=300, pattern=r"^[a-zA-Z0-9._/:@-]+$")
+    port: int = Field(default=8000, ge=1024, le=65535)  # non-root containers cannot use < 1024
+    path: str = Field(default="/mcp", pattern=r"^/[a-zA-Z0-9._/-]*$")
+    env: dict[str, str] = {}  # e.g. an API key the image needs; stored in its own Secret
+
+    @field_validator("env")
     @classmethod
-    def valid_name(cls, name: str) -> str:
-        if not SERVER_NAME.match(name):
-            raise ValueError("Use lowercase letters, digits and single underscores, e.g. shop_utils")
-        if name == "gateway":
-            raise ValueError('"gateway" is reserved for the gateway\'s own tools (gateway__search_tools)')
-        return name
+    def valid_env(cls, env: dict[str, str]) -> dict[str, str]:
+        for key in env:
+            if not ENV_NAME.match(key) or key == "MCP_TOKEN":
+                raise ValueError(f"Invalid variable name {key!r} (use UPPER_CASE; MCP_TOKEN is set by the gateway)")
+        return env
 
 
 class UpdateServer(BaseModel):
@@ -103,7 +125,7 @@ def to_out(server: Server, overrides: dict) -> ServerOut:
         id=server.id, name=server.name, url=server.url, auth_type=server.auth_type,
         auth_header=server.auth_header, has_credential=server.credential_encrypted is not None,
         enabled=server.enabled, status=state.status, error=state.error, checked_at=state.checked_at,
-        tools=tools, skipped_tools=state.skipped_tools,
+        tools=tools, skipped_tools=state.skipped_tools, image=server.image,
     )
 
 
@@ -135,10 +157,33 @@ async def add_server(body: CreateServer, db: AsyncSession = Depends(get_db)) -> 
     return to_out(server, await load_overrides())
 
 
+@router.post("/hosted", status_code=201, dependencies=[Depends(admin_user)])
+async def add_hosted_server(body: CreateHostedServer, db: AsyncSession = Depends(get_db)) -> ServerOut:
+    """Run a container image in the cluster and register it (see app/hosting.py)."""
+    if not settings.hosted_enabled:
+        raise HTTPException(409, "Hosted servers are switched off in this installation.")
+    if await db.scalar(select(Server).where(Server.name == body.name)):
+        raise HTTPException(409, f"A server named '{body.name}' already exists.")
+    try:
+        token = await hosting.deploy(body.name, body.image, body.port, body.env)
+    except hosting.HostingError as error:
+        raise HTTPException(502, str(error)) from None
+
+    server = Server(name=body.name, url=hosting.server_url(body.name, body.port, body.path), auth_type="bearer",
+                    credential_encrypted=encrypt(token), image=body.image)
+    db.add(server)
+    await db.commit()
+    await upstreams.refresh(server)  # "unreachable" until the pod has started; the health loop updates it
+    return to_out(server, await load_overrides())
+
+
 @router.patch("/{server_id}", dependencies=[Depends(admin_user)])
 async def edit_server(server_id: int, body: UpdateServer, db: AsyncSession = Depends(get_db)) -> ServerOut:
     server = await get_server_or_404(db, server_id)
     changes = body.model_dump(exclude_unset=True)
+    if server.image and set(changes) - {"enabled"}:
+        raise HTTPException(409, "A hosted server's address and credential are managed by the gateway. "
+                                 "Remove it and add it again to change it.")
     for field in ("url", "auth_type", "auth_header", "enabled"):
         if changes.get(field) is not None:
             setattr(server, field, changes[field])
@@ -157,6 +202,11 @@ async def edit_server(server_id: int, body: UpdateServer, db: AsyncSession = Dep
 @router.delete("/{server_id}", status_code=204, dependencies=[Depends(admin_user)])
 async def remove_server(server_id: int, db: AsyncSession = Depends(get_db)) -> None:
     server = await get_server_or_404(db, server_id)
+    if server.image:  # hosted: delete its Deployment, Service, NetworkPolicy and Secret first
+        try:
+            await hosting.remove(server.name)
+        except hosting.HostingError as error:
+            raise HTTPException(502, str(error)) from None
     await db.delete(server)
     await db.commit()
     upstreams.states.pop(server_id, None)

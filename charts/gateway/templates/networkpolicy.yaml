@@ -69,6 +69,21 @@ spec:
             except: [10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, 169.254.0.0/16, 100.64.0.0/10]
       ports:
         - port: 443
+    {{- if .Values.hosted.enabled }}
+    # Hosted MCP servers (any non-privileged port) and the Kubernetes API.
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ .Values.hosted.namespace }}
+      ports:
+        - { port: 1024, endPort: 65535, protocol: TCP }
+    {{- range .Values.hosted.apiServerEgress }}
+    - to:
+        - ipBlock: { cidr: {{ .cidr }} }
+      ports:
+        - port: {{ .port }}
+    {{- end }}
+    {{- end }}
 ---
 # The dashboard only serves static files: reachable from the ingress
 # controller, and it never opens a connection itself.

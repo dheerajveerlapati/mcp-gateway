@@ -59,7 +59,7 @@ code { font-family: ui-monospace, Consolas, monospace; font-size: 0.85em; word-b
 .tools { margin: 8px 0 0; padding-left: 18px; display: flex; flex-direction: column; gap: 4px; }
 
 label { display: flex; flex-direction: column; gap: 4px; font-size: 0.9em; }
-input, select {
+input, select, textarea {
   padding: 7px 9px; border: 1px solid var(--border); border-radius: 6px;
   background: var(--bg); color: var(--text); font: inherit;
 }

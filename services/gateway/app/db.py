@@ -67,6 +67,8 @@ class Server(Base):
     # The secret, encrypted with ENCRYPTION_KEY. Never returned by the API.
     credential_encrypted: Mapped[str | None] = mapped_column(Text)
     enabled: Mapped[bool] = mapped_column(default=True)
+    # Set when the gateway runs this server itself from a container image (hosting.py).
+    image: Mapped[str | None] = mapped_column(String(300))
     created_at: Mapped[datetime] = mapped_column(server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(server_default=func.now(), onupdate=func.now())
 

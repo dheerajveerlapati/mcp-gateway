@@ -44,6 +44,11 @@ class Settings:
     # Tool calls one user may make per minute, across all gateway replicas.
     rate_limit_per_minute: int
 
+    # Hosted MCP servers (added by container image, see hosting.py).
+    hosted_enabled: bool
+    hosted_namespace: str
+    gateway_namespace: str  # where the gateway pods run (hosted servers accept only them)
+
     # Chat agent model. Without an API key the chat says it is not configured.
     llm_provider: str  # a LangChain provider name: "groq" or "google_genai"
     llm_model: str
@@ -69,6 +74,9 @@ def load_settings() -> Settings:
             if p.strip()
         ),
         rate_limit_per_minute=int(os.environ.get("RATE_LIMIT_PER_MINUTE", "60")),
+        hosted_enabled=os.environ.get("HOSTED_ENABLED", "false") == "true",
+        hosted_namespace=os.environ.get("HOSTED_NAMESPACE", "mcp-hosted"),
+        gateway_namespace=os.environ.get("GATEWAY_NAMESPACE", "gateway"),
         llm_provider=os.environ.get("LLM_PROVIDER", "groq"),
         llm_model=os.environ.get("LLM_MODEL", "openai/gpt-oss-120b"),
         llm_api_key=os.environ.get("LLM_API_KEY", ""),

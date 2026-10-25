@@ -39,7 +39,13 @@ spec:
         prometheus.io/port: "8000"
         prometheus.io/path: /metrics
     spec:
-      automountServiceAccountToken: false # it never talks to the Kubernetes API
+      {{- if .Values.hosted.enabled }}
+      # Talks to the Kubernetes API only to run hosted MCP servers (Role in hosted.yaml).
+      serviceAccountName: {{ .Release.Name }}
+      automountServiceAccountToken: true
+      {{- else }}
+      automountServiceAccountToken: false # never talks to the Kubernetes API
+      {{- end }}
       securityContext:
         runAsNonRoot: true
         runAsUser: 10001

@@ -63,6 +63,7 @@ export type Server = {
   checked_at: string | null
   tools: Tool[]
   skipped_tools: string[]
+  image: string | null
 }
 
 export type TeamMember = {
