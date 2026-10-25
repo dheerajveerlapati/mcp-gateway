@@ -37,6 +37,10 @@ wp option update woocommerce_coming_soon no # new shops start hidden from visito
 wp option update woocommerce_onboarding_profile '{"skipped":true}' --format=json
 wp wc tool run install_pages --user="$ADMIN_USER" # shop, cart, checkout, my-account
 
+# Show the shop on the home page (WordPress's default home page is a blog list).
+wp option update show_on_front page
+wp option update page_on_front "$(wp option get woocommerce_shop_page_id)"
+
 # Cash on delivery: the test-friendly payment method used in the demo.
 wp option update woocommerce_cod_settings --format=json \
   '{"enabled":"yes","title":"Cash on delivery","description":"Pay with cash upon delivery.","instructions":"Pay with cash upon delivery.","enable_for_methods":[],"enable_for_virtual":"yes"}'
