@@ -73,6 +73,9 @@ class UpstreamCallError(Exception):
 class Upstreams:
     def __init__(self):
         self.states: dict[int, UpstreamState] = {}  # by server id
+        # False until the first full check is done. Until then this replica does
+        # not know any tools, so /readyz keeps it out of the Service.
+        self.first_check_done = False
 
     def state(self, server_id: int) -> UpstreamState:
         return self.states.get(server_id, UpstreamState())
@@ -98,6 +101,7 @@ class Upstreams:
         for server_id in list(self.states):
             if server_id not in known_ids:
                 del self.states[server_id]
+        self.first_check_done = True
 
     async def refresh(self, server: Server) -> None:
         """Check one server and remember the result."""

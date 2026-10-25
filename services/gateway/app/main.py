@@ -77,7 +77,13 @@ async def healthz():
 
 @app.get("/readyz", include_in_schema=False)
 async def readyz():
-    """Readiness: we can reach the database, so we can serve requests."""
+    """Readiness: the database answers and the upstreams have been checked once.
+
+    A new replica that has not finished its first check knows no tools yet; it
+    must not receive traffic until it does.
+    """
+    if not upstreams.first_check_done:
+        return JSONResponse({"status": "checking upstreams"}, status_code=503)
     try:
         async with Session() as db:
             await db.execute(text("SELECT 1"))

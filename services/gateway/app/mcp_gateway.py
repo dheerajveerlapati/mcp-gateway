@@ -58,7 +58,7 @@ async def visible_tools(caller: Caller) -> list[Tool]:
     overrides = await load_overrides()
     tools = []
     for server in await enabled_servers():
-        state = upstreams.state(server.id)
+        state = await current_state(server)
         if state.status != "connected":
             continue  # a dead server simply contributes no tools
         for tool in state.tools:
@@ -208,8 +208,24 @@ async def over_rate_limit(user: User) -> bool:
 async def caller_may_use(caller: Caller, server: ServerRow, tool_name: str) -> bool:
     """The same rule as the tool list, checked again because a client can call
     a tool by name without ever having been shown it."""
-    tool = next((t for t in upstreams.state(server.id).tools if t.name == tool_name), None)
+    state = await current_state(server)
+    tool = next((t for t in state.tools if t.name == tool_name), None)
     return may_use(caller.user.role, access_for(server.id, tool_name, tool, await load_overrides()))
+
+
+async def current_state(server: ServerRow):
+    """This replica's view of an enabled server, re-checked if it is stale.
+
+    Each replica remembers upstream status in memory. If an admin just enabled
+    a server through another replica, this one may still remember it as
+    disabled (or, if it just started, not know it yet); check it now rather
+    than wait for the next health-check round.
+    """
+    state = upstreams.state(server.id)
+    if state.status in ("disabled", "unknown"):
+        await upstreams.refresh(server)
+        state = upstreams.state(server.id)
+    return state
 
 
 async def enabled_servers() -> list[ServerRow]:
