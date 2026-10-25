@@ -50,6 +50,9 @@ spec:
       containers:
         - name: setup
           image: {{ .Values.setup.image }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities: { drop: [ALL] }
           command: [sh, /setup/setup.sh]
           workingDir: /var/www/html
           env:

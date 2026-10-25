@@ -29,9 +29,11 @@ class Settings:
     bootstrap_admin_email: str
     bootstrap_admin_password: str
 
-    # The WooCommerce MCP server, registered automatically on first start.
+    # Our in-cluster MCP servers, registered automatically on first start.
     woo_mcp_url: str
     woo_mcp_token: str
+    utils_mcp_url: str
+    utils_mcp_token: str
 
     # How long one upstream tool call may take before we give up.
     upstream_timeout_seconds: float
@@ -67,6 +69,8 @@ def load_settings() -> Settings:
         bootstrap_admin_password=_required("BOOTSTRAP_ADMIN_PASSWORD"),
         woo_mcp_url=os.environ.get("WOO_MCP_URL", ""),
         woo_mcp_token=os.environ.get("WOO_MCP_TOKEN", ""),
+        utils_mcp_url=os.environ.get("UTILS_MCP_URL", ""),
+        utils_mcp_token=os.environ.get("UTILS_MCP_TOKEN", ""),
         upstream_timeout_seconds=float(os.environ.get("UPSTREAM_TIMEOUT_SECONDS", "15")),
         health_interval_seconds=float(os.environ.get("HEALTH_INTERVAL_SECONDS", "10")),
         allowed_internal_hosts=tuple(

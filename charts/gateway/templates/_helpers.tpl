@@ -38,6 +38,10 @@ helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version }}
 - name: WOO_MCP_TOKEN
   valueFrom:
     secretKeyRef: { name: {{ $secret }}, key: woo-mcp-token }
+- name: UTILS_MCP_TOKEN
+  valueFrom:
+    secretKeyRef: { name: {{ $secret }}, key: utils-mcp-token, optional: true }
+- { name: UTILS_MCP_URL, value: {{ .Values.gateway.utilsMcpUrl | quote }} }
 - { name: BOOTSTRAP_ADMIN_EMAIL, value: {{ .Values.gateway.bootstrapAdminEmail | quote }} }
 - { name: WOO_MCP_URL, value: {{ .Values.gateway.wooMcpUrl | quote }} }
 - { name: PUBLIC_URL, value: {{ include "gateway.publicUrl" . | quote }} }

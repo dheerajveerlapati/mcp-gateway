@@ -4,7 +4,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-CLUSTER=mcp-gateway
+CLUSTER=${CLUSTER:-mcp-gateway} # override to try a second, throwaway cluster
 
 # k3d runs k3s (the same Kubernetes as the VPS) inside Docker.
 # Host ports 80/443 go to Traefik, the ingress controller bundled with k3s.

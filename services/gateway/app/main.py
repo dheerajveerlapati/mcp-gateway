@@ -25,10 +25,11 @@ log = logging.getLogger("gateway")
 
 
 async def first_start_setup() -> None:
-    """Create the first admin and register the WooCommerce server, once.
+    """Create the first admin and register our in-cluster MCP servers, once.
 
-    Both only happen on an empty database, so an admin who later removes the
-    WooCommerce server or changes the admin password is never overruled.
+    Both only happen on an empty database, so an admin who later removes a
+    server or changes the admin password is never overruled. The WooCommerce
+    server is registered first, as the assignment asks.
     """
     async with Session() as db:
         if await db.scalar(select(func.count()).select_from(User)) == 0:
@@ -36,10 +37,13 @@ async def first_start_setup() -> None:
                         password_hash=hash_password(settings.bootstrap_admin_password)))
             log.info("Created the first admin: %s", settings.bootstrap_admin_email)
 
-        if settings.woo_mcp_url and await db.scalar(select(func.count()).select_from(Server)) == 0:
-            db.add(Server(name="woo", url=settings.woo_mcp_url, auth_type="bearer",
-                          credential_encrypted=encrypt(settings.woo_mcp_token)))
-            log.info("Registered the WooCommerce MCP server: %s", settings.woo_mcp_url)
+        if await db.scalar(select(func.count()).select_from(Server)) == 0:
+            for name, url, token in (("woo", settings.woo_mcp_url, settings.woo_mcp_token),
+                                     ("utils", settings.utils_mcp_url, settings.utils_mcp_token)):
+                if url:
+                    db.add(Server(name=name, url=url, auth_type="bearer", credential_encrypted=encrypt(token)))
+                    await db.flush()  # keeps the ids in this order: woo is server #1
+                    log.info("Registered MCP server %s: %s", name, url)
 
         await db.commit()
 

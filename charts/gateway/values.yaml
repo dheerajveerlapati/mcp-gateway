@@ -12,7 +12,7 @@ ingress:
 
 # Secret with the gateway's secrets. Created by scripts/secrets.sh, never by
 # this chart. Keys: db-password, session-secret, encryption-key,
-# admin-password, woo-mcp-token
+# admin-password, woo-mcp-token, utils-mcp-token
 existingSecret: gateway-secrets
 
 gateway:
@@ -24,8 +24,10 @@ gateway:
   replicas: 1
   # The first admin, created on first start (password from the Secret).
   bootstrapAdminEmail: admin@example.com
-  # Registered automatically as the first upstream server.
+  # Registered automatically on first start (WooCommerce first). Set a URL
+  # to "" to leave that server out.
   wooMcpUrl: http://woo-mcp.mcp:8000/mcp
+  utilsMcpUrl: http://utils-mcp.mcp:8000/mcp
   upstreamTimeoutSeconds: 15
   healthIntervalSeconds: 10
   # Time zone the chat agent uses for "today".

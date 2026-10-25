@@ -46,11 +46,12 @@ ensure_secret mcp utils-mcp-secrets "mcp-token=$(random 24)"
 
 # Gateway: its database password, the key that signs login sessions, the key
 # that encrypts upstream credentials (Fernet format: 32 random bytes,
-# url-safe base64), the first admin's password, and the WooCommerce MCP
-# token it uses to call that server.
+# url-safe base64), the first admin's password, and the tokens it uses to
+# call our two MCP servers.
 ensure_secret gateway gateway-secrets \
   "db-password=$(random 16)" \
   "session-secret=$(random 32)" \
   "encryption-key=$(openssl rand -base64 32 | tr '+/' '-_')" \
   "admin-password=$(random 12)" \
-  "woo-mcp-token=$(read_secret mcp woo-mcp-secrets mcp-token)"
+  "woo-mcp-token=$(read_secret mcp woo-mcp-secrets mcp-token)" \
+  "utils-mcp-token=$(read_secret mcp utils-mcp-secrets mcp-token)"

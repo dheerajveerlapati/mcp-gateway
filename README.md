@@ -37,12 +37,14 @@ laptop (k3d) and on a VPS (k3s); only the values files differ.
 |---|---|---|
 | `store` | WordPress + WooCommerce (Deployment), MariaDB (StatefulSet), setup Job | Storefront only, via Ingress |
 | `mcp` | `woo-mcp`, `utils-mcp` | **No.** ClusterIP only, NetworkPolicy allows only gateway pods |
-| `gateway` | gateway, dashboard, Postgres (StatefulSet) | `/`, `/api`, `/mcp` via Ingress; Postgres is internal |
+| `gateway` | gateway, dashboard, Postgres (StatefulSet) | `/`, `/api`, `/mcp`, `/oauth`, `/.well-known` via Ingress; Postgres and `/metrics` are internal |
+| `mcp-hosted` | MCP servers added by container image (created by the gateway) | **No.** Only gateway pods may connect |
 
 ## Local setup (k3d)
 
 **Needs:** Docker (about 8 GB RAM for Docker), [k3d](https://k3d.io) 5.x, kubectl,
-Helm 3.8+ (tested with Helm 4.3), git, openssl and bash. On Windows use Git Bash.
+Helm 4 (`up.sh` uses `--force-conflicts`; tested with 4.3), git, openssl and bash. On
+Windows use Git Bash. [uv](https://docs.astral.sh/uv/) only for the end-to-end check.
 
 ```bash
 git clone <this repo> && cd mcp-gateway
@@ -84,18 +86,32 @@ edits** on Windows, macOS or Linux.
 | WooCommerce admin | http://store.localtest.me/wp-admin | `admin` | `kubectl -n store get secret store-secrets -o jsonpath='{.data.wp-admin-password}' \| base64 -d` |
 | Dashboard | http://dashboard.localtest.me | `admin@example.com` | `kubectl -n gateway get secret gateway-secrets -o jsonpath='{.data.admin-password}' \| base64 -d` |
 
-### Register the other upstream servers
+### Upstream servers
 
-The WooCommerce MCP server is registered automatically on first start. Add the
-other two in **Dashboard -> Servers -> Add server**:
+On first start the gateway registers our two in-cluster servers itself: **`woo`**
+(first, as required) and **`utils`**. Add the third in **Dashboard -> Servers -> Add by URL**:
 
 | Name | URL | Auth | Credential |
 |---|---|---|---|
-| `utils` | `http://utils-mcp.mcp:8000/mcp` | Bearer | `kubectl -n mcp get secret utils-mcp-secrets -o jsonpath='{.data.mcp-token}' \| base64 -d` |
 | `github` | `https://api.githubcopilot.com/mcp/x/issues` | Bearer | a GitHub fine-grained token, limited to **one** repo, **Issues: read and write** |
 
 The `/x/issues` URL loads only GitHub's issue tools (10 instead of dozens), which
 keeps prompts small for free-tier LLMs.
+
+**Add by container image** runs an MCP server image in the cluster for you (namespace
+`mcp-hosted`, with its own Secret, limits and NetworkPolicy) and registers it.
+Removing it deletes everything it created.
+
+### Check that everything works
+
+```bash
+ADMIN_PASSWORD=$(kubectl -n gateway get secret gateway-secrets -o jsonpath='{.data.admin-password}' | base64 -d) \
+  uv run --directory services/gateway python ../../scripts/e2e_check.py --slow
+```
+
+It plays an admin and a member through the public URLs and checks the tool list,
+routing, name collisions, permissions, search mode, the SSRF guard, disabling a server,
+timeouts, the rate limit, key revocation and the audit log (about 20 checks).
 
 ## How to use it
 
@@ -104,6 +120,7 @@ Open http://store.localtest.me, add a product to the cart, check out with
 **Cash on delivery**. The order appears in **wp-admin -> WooCommerce -> Orders**.
 
 ### Connect an external MCP client
+**With an API key**
 1. Dashboard -> **API keys** -> create a key. It is shown once.
 2. Add the gateway to your client. The dashboard shows the exact command:
    ```bash
@@ -113,8 +130,23 @@ Open http://store.localtest.me, add a product to the cart, check out with
    **MCP Inspector:** `npx @modelcontextprotocol/inspector`, transport
    *Streamable HTTP*, URL `http://dashboard.localtest.me/mcp`, header
    `Authorization: Bearer mgw_...`.
-3. You see the tools of every enabled server, named `<server>__<tool>`,
-   e.g. `woo__list_orders`, `utils__convert_currency`, `github__issue_write`.
+
+**With a browser login (OAuth)**: add only the URL. Clients that implement the MCP
+authorization spec (Claude Code, MCP Inspector) get a 401 pointing to the gateway's
+OAuth metadata, register, and open the browser on the dashboard's consent page.
+```bash
+claude mcp add --transport http mcp-gateway http://dashboard.localtest.me/mcp
+```
+Connected apps are listed (and can be disconnected) on the API keys page.
+
+You see the tools of every enabled server you are allowed to use, named
+`<server>__<tool>`, e.g. `woo__list_orders`, `utils__convert_currency`.
+Read-only tools are for everyone; tools that change things (`woo__create_product`,
+`woo__update_order_status`, `github__issue_write`) are admin-only unless an admin opens
+them up per tool on the Servers page.
+
+**Many tools?** Use `http://dashboard.localtest.me/mcp?tools=search`: the client then
+sees only `gateway__search_tools` and `gateway__call_tool`, and finds the tools it needs.
 
 ### Use the chat agent
 Dashboard -> **Chat**. Try *"Create a product called Blue Mug with price 499"* or
@@ -130,7 +162,7 @@ issue or revoke their keys. **Account**: change your password.
 | Step | How |
 |---|---|
 | Store order | Storefront -> COD checkout -> visible in wp-admin |
-| Chat as user A | *"Create a product called Blue Mug with price 499"* -> on the storefront; order it by hand; *"What orders came in today?"* |
+| Chat as user A (an admin, so it may create products) | *"Create a product called Blue Mug with price 499"* -> on the storefront; order it by hand; *"What orders came in today?"* |
 | External client as user B | Invite B, B creates a key, connect MCP Inspector or Claude Code with only URL + key; ask the orders question; *"List today's orders with totals in USD"* (woo + utils) |
 | Revoke B's key | Team -> B -> Keys -> Revoke. B's next request gets 401 and an audit row `denied` |
 | Disable a server | Servers -> Disable. Its tools vanish from the chat (tools are fetched per message) and from the external client on its next tool list |
@@ -138,7 +170,16 @@ issue or revoke their keys. **Account**: change your password.
 | Audit | Audit log page: every call above, with user, via (API key / chat), server, tool, time, duration, outcome |
 
 Useful extra demos: `utils__slow_task` with `seconds: 30` shows the 15 s timeout;
-`woo__ping` and `utils__ping` show the name-collision scheme.
+`woo__ping` and `utils__ping` show the name-collision scheme; user B calling
+`woo__create_product` shows a permission refusal.
+
+**Metrics:** `kubectl -n gateway port-forward deploy/gateway 8000` then
+http://localhost:8000/metrics (tool calls, latency and upstream status per server; not
+exposed through the Ingress). The Audit log page shows calls, error rate and p95 latency
+per server.
+
+**Two gateway replicas:** set `gateway.replicas: 2` in the values (production values
+already do). Change replicas through Helm values, not `kubectl scale`.
 
 ## Production-like setup (VPS with k3s)
 
@@ -232,15 +273,17 @@ helm rollback gateway 3 -n gateway --wait   # back to revision 3
 charts/
   store/        WordPress + WooCommerce + MariaDB, WP-CLI setup Job, Ingress, NetworkPolicies
   mcp-server/   one reusable chart for an internal MCP server (installed as woo-mcp and utils-mcp)
-  gateway/      gateway + Postgres + dashboard, Ingress, NetworkPolicies
+  gateway/      gateway + Postgres + dashboard, Ingress, NetworkPolicies,
+                hosted-servers namespace with RBAC, quota and limits
 services/
   woo-mcp/      our WooCommerce MCP server (Python, MCP SDK)
   utils-mcp/    helper MCP server: currency, shipping, time, ping, slow_task
-  gateway/      FastAPI: dashboard API, /mcp aggregator, chat agent, migrations
+  gateway/      FastAPI: dashboard API, /mcp aggregator, chat agent, OAuth, migrations
   dashboard/    React + Vite + TypeScript
 scripts/
   up.sh         one-command local setup
   secrets.sh    creates the Kubernetes Secrets with random values
+  e2e_check.py  end-to-end check through the public URLs
 docs/
   design.md, threat-model.md
 ```
@@ -249,11 +292,14 @@ docs/
 
 | Item | What is done | Where |
 |---|---|---|
-| 6. Security hardening (partial) | NetworkPolicies for every workload, with egress allow-lists for the MCP servers, gateway, dashboard and Postgres; our containers run as non-root with read-only root filesystems and no service-account token; upstream credentials encrypted at rest (Fernet); the gateway cannot reach private address ranges except its DB and the `mcp` namespace (network-level SSRF guard) | `charts/*/templates/networkpolicy.yaml`, `charts/*/templates/*.yaml`, `services/gateway/app/security.py` |
-| 7. Scaling (partial) | `/mcp` is stateless, so any replica serves any request; prod values run 2 gateway replicas; concurrent migrations are serialised with a Postgres advisory lock. No rate limiting yet | `services/gateway/app/mcp_gateway.py`, `migrations/env.py` |
-| 8. Observability (partial) | the dashboard shows why an upstream is unreachable (timeout, connection refused, credential rejected with HTTP status) and every failed call's reason is in the audit log. No metrics endpoint | `services/gateway/app/upstreams.py` |
-| 9. Upgrades and rollback | one Helm release per component, migrations in an init container, documented above | this README |
-| 1. VPS deployment | charts and prod values ready, steps above | `values-prod.yaml` files |
+| 2. Tool permissions | Read-only tools (MCP `readOnlyHint`) for everyone, every other tool admin-only by default; admins override per tool. Restricted tools are hidden from `tools/list` **and** refused when called by name (audited as `denied`) | `services/gateway/app/permissions.py`, `mcp_gateway.py`, Servers page |
+| 3. OAuth on the gateway | MCP authorization spec: protected-resource and authorization-server metadata, dynamic client registration, authorization code + PKCE (S256), refresh-token rotation, consent page, "Connected apps" with disconnect | `services/gateway/app/routes/oauth.py`, `dashboard/src/pages/AuthorizeApp.tsx` |
+| 4. Many tools | `/mcp?tools=search` exposes `gateway__search_tools` + `gateway__call_tool` (same checks and audit); the chat agent switches to it above 30 tools | `services/gateway/app/tool_search.py`, `agent.py` |
+| 5. Hosted MCP servers | Add a server by container image: the gateway creates its Secret, Deployment (non-root, read-only fs, limits, no API token), Service and NetworkPolicy in `mcp-hosted` via server-side apply, and deletes them on removal | `services/gateway/app/hosting.py`, `charts/gateway/templates/hosted.yaml` |
+| 6. Security hardening | SSRF guard on server URLs (must resolve to public addresses unless an allowed in-cluster MCP host; re-checked before every connection); least-privilege RBAC (the gateway may manage 4 object kinds in `mcp-hosted` only); default-deny NetworkPolicies in every namespace; all containers non-root (WordPress too, via a safe sysctl for port 80); upstream credentials encrypted at rest (Fernet) | `services/gateway/app/url_safety.py`, `charts/*/templates/networkpolicy.yaml`, `hosted.yaml` |
+| 7. Scaling | Stateless `/mcp`, verified with 2 gateway replicas; a replica is ready only after its first upstream check; per-user rate limit counted in Postgres so it holds across replicas | `mcp_gateway.py`, `upstreams.py`, `main.py` |
+| 8. Observability | Prometheus `/metrics` (calls by server and outcome, latency histogram, upstream up/down); per-server calls, error rate and p95 on the Audit page; readable reasons for unreachable upstreams and failed calls | `services/gateway/app/metrics.py`, `routes/audit.py`, `upstreams.py` |
+| 9. Upgrades and rollback | One Helm release per component, migrations in an init container with an advisory lock, documented above | this README |
+| 1. VPS deployment | Charts and prod values ready (TLS via cert-manager, GHCR images, 2 replicas); steps above | `values-prod.yaml` files |
 
-Not attempted: multi-store bonus, tool permissions per role, OAuth, many-tools search,
-hosted MCP servers by image.
+Not attempted: the multi-store bonus.

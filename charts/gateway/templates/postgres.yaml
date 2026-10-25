@@ -46,6 +46,9 @@ spec:
       containers:
         - name: postgres
           image: {{ .Values.postgres.image }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities: { drop: [ALL] }
           env:
             - { name: POSTGRES_USER, value: gateway }
             - { name: POSTGRES_DB, value: gateway }

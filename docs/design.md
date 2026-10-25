@@ -88,8 +88,9 @@ Every tool is exposed as `<server>__<tool>`, e.g. `woo__ping` and `utils__ping`.
 
 ### Calling a tool
 1. `McpEndpoint` identifies the caller before any MCP code runs: an API key (`mgw_...`,
-   SHA-256 looked up in `api_keys`, must not be revoked) or the chat agent's short-lived
-   signed token. Otherwise 401, and a refused key that belongs to a known user is
+   SHA-256 looked up in `api_keys`, must not be revoked), an OAuth access token
+   (`mgo_...`, see below) or the chat agent's short-lived signed token. Otherwise 401
+   (with the OAuth metadata link), and a refused key that belongs to a known user is
    audited as `denied`.
 2. `call_tool` splits the name, loads the server, refuses it if disabled.
 3. `upstreams.call_tool` decrypts that server's credential, connects, calls the tool with
@@ -98,9 +99,62 @@ Every tool is exposed as `<server>__<tool>`, e.g. `woo__ping` and `utils__ping`.
 4. Every outcome becomes a normal MCP tool result the model can read: the upstream's
    result, or `is_error` with a sentence like *"Server 'utils' failed: no answer within
    15 seconds"*.
-5. An audit row is written: user, source (`api_key` or `chat`), server, tool, time,
-   duration, outcome (`ok`, `error`, `timeout`, `denied`) and the error text. A failure to
-   write the audit row is logged and never breaks the call.
+5. An audit row is written: user, source (`api_key`, `oauth` or `chat`), server, tool,
+   time, duration, outcome (`ok`, `error`, `timeout`, `denied`) and the error text. A
+   failure to write the audit row is logged and never breaks the call.
+
+Before step 3 two more checks run, in this order: **permissions** and the **rate limit**.
+
+### Tool permissions (`app/permissions.py`)
+Tools the upstream marks read-only (`readOnlyHint`) are for everyone; any other tool may
+change something, so it is admin-only by default. Admins override per tool (stored in
+`tool_permissions`). A caller's `tools/list` hides what they may not use, and
+`tools/call` checks again, because a client can call a tool by name without being shown
+it. An unknown tool (server not reachable yet) gets the safe default.
+
+### Rate limit
+Each user may make `rateLimitPerMinute` tool calls per minute (60 by default). The count
+comes from the audit log in Postgres (`user_id, created_at` index), so it is one limit
+across all gateway replicas, not one per pod.
+
+### Many tools: search mode (`app/tool_search.py`)
+`/mcp?tools=search` lists only `gateway__search_tools(query)` and
+`gateway__call_tool(name, arguments)`. Search ranks the caller's permitted tools by
+keyword matches (name x2, description x1) and returns names, descriptions and argument
+schemas; call goes through exactly the same routing, permissions, rate limit and audit.
+The chat agent switches to this mode when a user has more than 30 tools, so the model
+sees two tool definitions instead of hundreds.
+
+### Several replicas
+Upstream status lives in each replica's memory. Two rules keep replicas correct:
+- `/readyz` stays 503 until the replica's first full upstream check, so Kubernetes sends
+  it no traffic while it knows no tools.
+- If the database says a server is enabled but this replica remembers it as disabled or
+  unknown (an admin just enabled it through another replica), it re-checks that server
+  before answering.
+
+Verified with two replicas: the end-to-end check passes repeatedly with calls spread over
+both pods.
+
+### Hosted MCP servers (`app/hosting.py`)
+An admin can add a server by container image. The gateway writes four objects to the
+`mcp-hosted` namespace with server-side apply (one idempotent call each, safe to retry):
+a Secret (the admin's environment variables plus a random `MCP_TOKEN`), a Deployment
+(non-root, read-only root filesystem, CPU/memory limits, no service-account token, TCP
+probes), a Service, and a NetworkPolicy (in: only gateway pods; out: DNS and public
+HTTPS). It then registers `http://mcp-<name>.mcp-hosted:<port>/mcp` with that token.
+Removing the server deletes the four objects. The namespace has a ResourceQuota, a
+LimitRange and a default-deny policy; the gateway's Role allows only these four kinds in
+only this namespace.
+
+### OAuth for MCP clients (`app/routes/oauth.py`)
+Implements the MCP authorization spec so a client can log in through the browser instead
+of using a pasted key: a 401 from `/mcp` carries `resource_metadata`; the client reads the
+protected-resource and authorization-server metadata, registers itself, sends the user to
+`/oauth/authorize` -> the dashboard consent page, and exchanges the one-time code (PKCE
+S256) for a 1-hour access token and a rotating 30-day refresh token. Tokens are stored as
+SHA-256 and can be disconnected per app. Written by hand rather than with the SDK's
+helpers because those reject a non-HTTPS issuer, and the local setup is plain HTTP.
 
 ### Chat agent (`app/agent.py`)
 The chat is **another MCP client of the gateway**, not a shortcut:
@@ -129,7 +183,8 @@ the server stores no chat history.
 | **Storage class** | `local-path` (node disk) | `local-path` on a single-node k3s; on a multi-node or cloud cluster set `storageClass` to a network disk; back up the MariaDB and Postgres volumes |
 | **Secrets** | `scripts/secrets.sh` generates them in the cluster | same script, or an external secret manager (Sealed Secrets, External Secrets). Turn on k3s secrets encryption (`--secrets-encryption`) so Secrets are encrypted in etcd |
 | **Images** | built and imported into k3d | multi-arch images in GHCR, pinned tags |
-| **Replicas** | 1 | gateway, MCP servers and dashboard 2 each |
+| **Replicas** | 1 | gateway, MCP servers and dashboard 2 each (set in values, not with `kubectl scale`) |
+| **Kubernetes API egress** | k3s defaults (`10.43.0.1:443`, API server on `6443`) | adjust `hosted.apiServerEgress` if the cluster uses other addresses |
 | **Cookies** | `Secure` off (plain HTTP) | `Secure` on automatically when `PUBLIC_URL` is https |
 
 ## Known limitations
@@ -138,8 +193,12 @@ the server stores no chat history.
   storage (or plugins baked into the image and uploads on object storage), a Redis object
   cache, and a replicated or managed MariaDB. The gateway protects it with timeouts and
   page limits (at most 50 items per list call).
-- Upstream status is kept in each gateway replica's memory, so two replicas may briefly
-  disagree about a server's status. The enabled/disabled flag always comes from the database.
+- Upstream status is kept in each gateway replica's memory, so for up to one health-check
+  interval (10 s) two replicas may show a different status for a server that just died.
+  The enabled/disabled flag always comes from the database.
 - No push of `tools/list_changed` (stateless mode, see above).
-- No per-user rate limits and no per-role tool permissions yet.
+- Tool permissions are per role (admin / member), not per individual user.
+- Admin actions on servers and members are not in the audit log; tool calls are.
+- Hosted servers must run as a non-root user (uid 10001 is forced) and listen on a port
+  of 1024 or above.
 - Invites are links shown to the admin, not emails.

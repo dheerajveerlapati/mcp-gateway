@@ -45,6 +45,9 @@ spec:
       containers:
         - name: mariadb
           image: {{ .Values.mariadb.image }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities: { drop: [ALL] }
           env:
             - name: MARIADB_DATABASE
               value: {{ .Values.mariadb.database }}
