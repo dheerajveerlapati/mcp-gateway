@@ -112,6 +112,19 @@ change something, so it is admin-only by default. Admins override per tool (stor
 `tools/call` checks again, because a client can call a tool by name without being shown
 it. An unknown tool (server not reachable yet) gets the safe default.
 
+### Server access per user (hierarchy)
+An admin can also limit any user to some servers (Team page; `users.all_servers` and
+the `user_server_access` table). Other servers' tools are hidden from `tools/list`, refused
+on `tools/call` (audited as `denied`), and left out of the dashboard's server list. A
+server added later is not given to a limited user until an admin ticks it. Access is a
+hierarchy:
+- The owner (the first admin, `BOOTSTRAP_ADMIN_EMAIL`) always has every server and
+  cannot be limited, demoted or removed.
+- An admin can only give servers they have themselves, and only manage people whose
+  servers they also have. Nobody changes their own access.
+- A limited admin only sees and manages their own servers. A server they add is given
+  to them, and people they invite start with their servers.
+
 ### Rate limit
 Each user may make `rateLimitPerMinute` tool calls per minute (60 by default). The count
 comes from the audit log in Postgres (`user_id, created_at` index), so it is one limit
@@ -197,7 +210,8 @@ the server stores no chat history.
   interval (10 s) two replicas may show a different status for a server that just died.
   The enabled/disabled flag always comes from the database.
 - No push of `tools/list_changed` (stateless mode, see above).
-- Tool permissions are per role (admin / member), not per individual user.
+- Tool permissions (read-only vs. changing tools) are per role; server access is per user.
+- API keys are not covered by the server-access hierarchy: any admin can revoke anyone's key.
 - Admin actions on servers and members are not in the audit log; tool calls are.
 - Hosted servers must run as a non-root user (uid 10001 is forced) and listen on a port
   of 1024 or above.

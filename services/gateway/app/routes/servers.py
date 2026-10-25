@@ -16,8 +16,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app import hosting
 from app.auth import admin_user, current_user, get_db
 from app.config import settings
-from app.db import Server, ToolPermission
-from app.permissions import EVERYONE, access_for, default_access, load_overrides
+from app.db import Server, ToolPermission, User, UserServerAccess
+from app.permissions import EVERYONE, access_for, allowed_server_ids, default_access, load_overrides, may_use_server
 from app.security import encrypt
 from app.upstreams import upstreams
 from app.url_safety import UnsafeUrl, check_url
@@ -136,15 +136,17 @@ def check_auth_fields(server: Server) -> None:
         raise HTTPException(422, "This authentication type needs a credential.")
 
 
-@router.get("", dependencies=[Depends(current_user)])
-async def list_servers(db: AsyncSession = Depends(get_db)) -> list[ServerOut]:
+@router.get("")
+async def list_servers(user: User = Depends(current_user), db: AsyncSession = Depends(get_db)) -> list[ServerOut]:
     servers = await db.scalars(select(Server).order_by(Server.id))
     overrides = await load_overrides()
-    return [to_out(s, overrides) for s in servers]
+    allowed = await allowed_server_ids(user)  # someone limited to some servers sees only those
+    return [to_out(s, overrides) for s in servers if may_use_server(allowed, s.id)]
 
 
-@router.post("", status_code=201, dependencies=[Depends(admin_user)])
-async def add_server(body: CreateServer, db: AsyncSession = Depends(get_db)) -> ServerOut:
+@router.post("", status_code=201)
+async def add_server(body: CreateServer,
+                     admin: User = Depends(admin_user), db: AsyncSession = Depends(get_db)) -> ServerOut:
     if await db.scalar(select(Server).where(Server.name == body.name)):
         raise HTTPException(409, f"A server named '{body.name}' already exists.")
     server = Server(name=body.name, url=body.url, auth_type=body.auth_type, auth_header=body.auth_header,
@@ -152,13 +154,15 @@ async def add_server(body: CreateServer, db: AsyncSession = Depends(get_db)) -> 
     check_auth_fields(server)
     await check_safe_url(server.url)
     db.add(server)
+    await give_to_limited_admin(db, admin, server)
     await db.commit()
     await upstreams.refresh(server)  # show its status and tools right away
     return to_out(server, await load_overrides())
 
 
-@router.post("/hosted", status_code=201, dependencies=[Depends(admin_user)])
-async def add_hosted_server(body: CreateHostedServer, db: AsyncSession = Depends(get_db)) -> ServerOut:
+@router.post("/hosted", status_code=201)
+async def add_hosted_server(body: CreateHostedServer,
+                            admin: User = Depends(admin_user), db: AsyncSession = Depends(get_db)) -> ServerOut:
     """Run a container image in the cluster and register it (see app/hosting.py)."""
     if not settings.hosted_enabled:
         raise HTTPException(409, "Hosted servers are switched off in this installation.")
@@ -172,14 +176,16 @@ async def add_hosted_server(body: CreateHostedServer, db: AsyncSession = Depends
     server = Server(name=body.name, url=hosting.server_url(body.name, body.port, body.path), auth_type="bearer",
                     credential_encrypted=encrypt(token), image=body.image)
     db.add(server)
+    await give_to_limited_admin(db, admin, server)
     await db.commit()
     await upstreams.refresh(server)  # "unreachable" until the pod has started; the health loop updates it
     return to_out(server, await load_overrides())
 
 
-@router.patch("/{server_id}", dependencies=[Depends(admin_user)])
-async def edit_server(server_id: int, body: UpdateServer, db: AsyncSession = Depends(get_db)) -> ServerOut:
-    server = await get_server_or_404(db, server_id)
+@router.patch("/{server_id}")
+async def edit_server(server_id: int, body: UpdateServer,
+                      admin: User = Depends(admin_user), db: AsyncSession = Depends(get_db)) -> ServerOut:
+    server = await get_server_or_404(db, server_id, admin)
     changes = body.model_dump(exclude_unset=True)
     if server.image and set(changes) - {"enabled"}:
         raise HTTPException(409, "A hosted server's address and credential are managed by the gateway. "
@@ -199,9 +205,10 @@ async def edit_server(server_id: int, body: UpdateServer, db: AsyncSession = Dep
     return to_out(server, await load_overrides())
 
 
-@router.delete("/{server_id}", status_code=204, dependencies=[Depends(admin_user)])
-async def remove_server(server_id: int, db: AsyncSession = Depends(get_db)) -> None:
-    server = await get_server_or_404(db, server_id)
+@router.delete("/{server_id}", status_code=204)
+async def remove_server(server_id: int,
+                        admin: User = Depends(admin_user), db: AsyncSession = Depends(get_db)) -> None:
+    server = await get_server_or_404(db, server_id, admin)
     if server.image:  # hosted: delete its Deployment, Service, NetworkPolicy and Secret first
         try:
             await hosting.remove(server.name)
@@ -212,11 +219,11 @@ async def remove_server(server_id: int, db: AsyncSession = Depends(get_db)) -> N
     upstreams.states.pop(server_id, None)
 
 
-@router.put("/{server_id}/tools/{tool_name}/access", dependencies=[Depends(admin_user)])
+@router.put("/{server_id}/tools/{tool_name}/access")
 async def set_tool_access(server_id: int, tool_name: str, body: AccessUpdate,
-                          db: AsyncSession = Depends(get_db)) -> ServerOut:
+                          admin: User = Depends(admin_user), db: AsyncSession = Depends(get_db)) -> ServerOut:
     """Let everyone use a tool, restrict it to admins, or go back to the default."""
-    server = await get_server_or_404(db, server_id)
+    server = await get_server_or_404(db, server_id, admin)
     existing = await db.get(ToolPermission, (server_id, tool_name))
     if body.access == "default":
         if existing:
@@ -236,8 +243,16 @@ async def check_safe_url(url: str) -> None:
         raise HTTPException(422, str(error)) from None
 
 
-async def get_server_or_404(db: AsyncSession, server_id: int) -> Server:
+async def give_to_limited_admin(db: AsyncSession, admin: User, server: Server) -> None:
+    """An admin limited to some servers keeps access to a server they add themselves."""
+    if await allowed_server_ids(admin) is not None:
+        await db.flush()  # assigns server.id
+        db.add(UserServerAccess(user_id=admin.id, server_id=server.id))
+
+
+async def get_server_or_404(db: AsyncSession, server_id: int, admin: User) -> Server:
     server = await db.get(Server, server_id)
-    if server is None:
+    # An admin limited to some servers cannot manage the others (or learn they exist).
+    if server is None or not may_use_server(await allowed_server_ids(admin), server.id):
         raise HTTPException(404, "Server not found.")
     return server

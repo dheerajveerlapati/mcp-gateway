@@ -7,6 +7,16 @@ The rule:
   by default only admins may use it.
 - An admin can override any tool to "everyone" or "admins".
 
+On top of that, a user can be limited to some servers only (`User.all_servers`
+off, the allowed servers in `user_server_access`). The other servers' tools
+are hidden and refused the same way, and a server added later is not given to
+them until an admin ticks it. This is a hierarchy:
+- The owner (the first admin, BOOTSTRAP_ADMIN_EMAIL) always has every server
+  and cannot be limited.
+- Any other admin or member can be limited.
+- An admin can only give servers they have themselves, and can only change
+  the access of someone whose servers they also have.
+
 Tools a caller may not use are hidden from their tool list AND refused if
 called directly (a client could guess a tool name it was never shown).
 """
@@ -14,7 +24,8 @@ called directly (a client could guess a tool name it was never shown).
 from mcp_types import Tool
 from sqlalchemy import select
 
-from app.db import Session, ToolPermission
+from app.config import settings
+from app.db import Session, ToolPermission, User, UserServerAccess
 
 EVERYONE = "everyone"
 ADMINS = "admins"
@@ -40,3 +51,25 @@ async def load_overrides() -> dict[tuple[int, str], str]:
 
 def access_for(server_id: int, tool_name: str, tool: Tool | None, overrides: dict) -> str:
     return overrides.get((server_id, tool_name)) or default_access(tool)
+
+
+def is_owner(user: User) -> bool:
+    return user.email == settings.bootstrap_admin_email.lower()
+
+
+async def allowed_server_ids(user: User) -> set[int] | None:
+    """The ids of the servers this user may use, or None for every server."""
+    if is_owner(user) or user.all_servers:
+        return None
+    async with Session() as db:
+        rows = await db.scalars(select(UserServerAccess.server_id).where(UserServerAccess.user_id == user.id))
+        return set(rows)
+
+
+def may_use_server(allowed: set[int] | None, server_id: int) -> bool:
+    return allowed is None or server_id in allowed
+
+
+def covers(granter: set[int] | None, granted: set[int] | None) -> bool:
+    """True if someone with `granter` access has every server in `granted`."""
+    return granter is None or (granted is not None and granted <= granter)

@@ -73,6 +73,9 @@ export type TeamMember = {
   role: 'admin' | 'member'
   status: 'active' | 'invited'
   created_at: string
+  all_servers: boolean
+  server_ids: number[]
+  owner: boolean
 }
 
 export type ApiKey = {

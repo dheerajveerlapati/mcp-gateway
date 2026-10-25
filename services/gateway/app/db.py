@@ -4,12 +4,13 @@ users      who is on the team, and their role
 api_keys   each user's keys for MCP clients (only a hash is stored)
 servers    the registered upstream MCP servers (credential stored encrypted)
 tool_permissions  admin overrides of who may use a tool
+user_server_access  which servers a member limited to some servers may use
 audit_log  one row per tool call
 """
 
 from datetime import datetime
 
-from sqlalchemy import DateTime, ForeignKey, Index, String, Text, func
+from sqlalchemy import DateTime, ForeignKey, Index, String, Text, func, true
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
@@ -31,6 +32,9 @@ class User(Base):
     email: Mapped[str] = mapped_column(String(255), unique=True)
     name: Mapped[str] = mapped_column(String(100))
     role: Mapped[str] = mapped_column(String(20))  # "admin" or "member"
+    # True: every enabled server. False: only the servers in user_server_access.
+    # Admins always get every server, whatever this says.
+    all_servers: Mapped[bool] = mapped_column(default=True, server_default=true())
     # Empty until an invited user sets their password.
     password_hash: Mapped[str | None] = mapped_column(String(255))
     # One-time invite link (hashed), cleared once the invite is accepted.
@@ -121,6 +125,15 @@ class ToolPermission(Base):
     server_id: Mapped[int] = mapped_column(ForeignKey("servers.id", ondelete="CASCADE"), primary_key=True)
     tool_name: Mapped[str] = mapped_column(String(100), primary_key=True)  # the upstream's name, unprefixed
     access: Mapped[str] = mapped_column(String(10))  # "everyone" or "admins"
+
+
+class UserServerAccess(Base):
+    """A server that a member limited to some servers may use (see app/permissions.py)."""
+
+    __tablename__ = "user_server_access"
+
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), primary_key=True)
+    server_id: Mapped[int] = mapped_column(ForeignKey("servers.id", ondelete="CASCADE"), primary_key=True)
 
 
 class AuditLog(Base):

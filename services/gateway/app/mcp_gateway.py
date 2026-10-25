@@ -30,7 +30,7 @@ from app.auth import check_api_key
 from app.config import settings
 from app.metrics import TOOL_CALL_SECONDS, TOOL_CALLS
 from app.db import AuditLog, Server as ServerRow, Session, User
-from app.permissions import access_for, load_overrides, may_use
+from app.permissions import access_for, allowed_server_ids, load_overrides, may_use, may_use_server
 from app.routes.oauth import ACCESS_TOKEN_PREFIX, user_from_access_token
 from app.security import API_KEY_PREFIX, CHAT_AUDIENCE, read_token
 from app.tool_search import CALL_TOOL, META_TOOLS, SEARCH_TOOL, search
@@ -63,8 +63,11 @@ async def list_tools(ctx, params) -> ListToolsResult:
 async def visible_tools(caller: Caller) -> list[Tool]:
     """Tools of every enabled, reachable server that this caller may use, prefixed."""
     overrides = await load_overrides()
+    allowed = await allowed_server_ids(caller.user)
     tools = []
     for server in await enabled_servers():
+        if not may_use_server(allowed, server.id):
+            continue  # hidden: an admin limited this user to other servers
         state = await current_state(server)
         if state.status != "connected":
             continue  # a dead server simply contributes no tools
@@ -103,6 +106,9 @@ async def route_call(caller: Caller, name: str, arguments: dict) -> CallToolResu
         result, outcome = error_result(f"Unknown tool '{name}'."), "error"
     elif not server.enabled:
         result, outcome = error_result(f"Server '{server_name}' is disabled by an admin."), "denied"
+    elif not may_use_server(await allowed_server_ids(caller.user), server.id):
+        result = error_result(f"You do not have access to server '{server_name}'. Ask an admin.")
+        outcome = "denied"
     elif not await caller_may_use(caller, server, tool_name):
         result = error_result(f"Your role ({caller.user.role}) may not use {name}. Ask an admin.")
         outcome = "denied"
