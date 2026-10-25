@@ -11,11 +11,53 @@ export default function Keys() {
       <h1>API keys</h1>
       <section className="card">
         <h2>Connect an MCP client</h2>
-        <p>One URL gives you the tools of every enabled server. Create a key below, then add it to your client.</p>
+        <p>
+          One URL gives you the tools of every enabled server. Either create a key below and add it to your client,
+          or add just the URL: clients that support OAuth (e.g. Claude Code) then open the browser to log you in.
+        </p>
         <CopyBox label="Gateway URL" value={GATEWAY_URL} />
+        <CopyBox label="Claude Code, browser login (no key)" value={`claude mcp add --transport http mcp-gateway ${GATEWAY_URL}`} />
       </section>
       <KeyList />
+      <ConnectedApps />
     </>
+  )
+}
+
+type ConnectedApp = { client_id: string; name: string; last_login: string }
+
+// Apps that logged in through OAuth (browser login) and still hold a token.
+function ConnectedApps() {
+  const [apps, setApps] = useState<ConnectedApp[]>([])
+  const [reloads, setReloads] = useState(0)
+
+  useEffect(() => {
+    api<ConnectedApp[]>('/api/oauth/apps').then(setApps).catch(() => setApps([]))
+  }, [reloads])
+
+  async function disconnect(app: ConnectedApp) {
+    if (!confirm(`Disconnect ${app.name}? Its next request is refused.`)) return
+    await api(`/api/oauth/apps/${encodeURIComponent(app.client_id)}`, { method: 'DELETE' })
+    setReloads(n => n + 1)
+  }
+
+  return (
+    <section className="card">
+      <h2>Connected apps (browser login)</h2>
+      <table>
+        <thead><tr><th>App</th><th>Last login</th><th /></tr></thead>
+        <tbody>
+          {apps.map(app => (
+            <tr key={app.client_id}>
+              <td>{app.name}</td>
+              <td>{formatTime(app.last_login)}</td>
+              <td><button className="danger" onClick={() => disconnect(app)}>Disconnect</button></td>
+            </tr>
+          ))}
+          {apps.length === 0 && <tr><td colSpan={3} className="muted">No apps connected.</td></tr>}
+        </tbody>
+      </table>
+    </section>
   )
 }
 

@@ -31,6 +31,7 @@ from app.config import settings
 from app.metrics import TOOL_CALL_SECONDS, TOOL_CALLS
 from app.db import AuditLog, Server as ServerRow, Session, User
 from app.permissions import access_for, load_overrides, may_use
+from app.routes.oauth import ACCESS_TOKEN_PREFIX, user_from_access_token
 from app.security import API_KEY_PREFIX, CHAT_AUDIENCE, read_token
 from app.tool_search import CALL_TOOL, META_TOOLS, SEARCH_TOOL, search
 from app.upstreams import SEPARATOR, UpstreamCallError, upstreams
@@ -41,7 +42,7 @@ log = logging.getLogger("gateway.mcp")
 @dataclass
 class Caller:
     user: User
-    source: str  # "api_key" (an MCP client) or "chat" (the dashboard chat agent)
+    source: str  # "api_key" or "oauth" (an MCP client), or "chat" (the dashboard chat agent)
     search_mode: bool = False  # connected to /mcp?tools=search (see tool_search.py)
 
 
@@ -151,8 +152,11 @@ class McpEndpoint:
         if caller is None:
             if refused_user:  # e.g. a revoked key: we know whose it was, so audit it
                 await audit_refusal(refused_user, refusal, receive)
+            # The resource_metadata link is how OAuth-capable clients discover
+            # the browser login (MCP authorization spec); others just see 401.
+            metadata = f"{settings.public_url}/.well-known/oauth-protected-resource"
             response = JSONResponse({"error": refusal}, status_code=401,
-                                    headers={"WWW-Authenticate": 'Bearer realm="mcp-gateway"'})
+                                    headers={"WWW-Authenticate": f'Bearer resource_metadata="{metadata}"'})
             await response(scope, receive, send)
             return
 
@@ -178,6 +182,13 @@ async def identify(token: str | None) -> tuple[Caller | None, str, User | None]:
         if check.refusal:
             return None, check.refusal, check.user
         return Caller(check.user, "api_key"), "", None
+
+    if token.startswith(ACCESS_TOKEN_PREFIX):  # an OAuth access token (browser login)
+        async with Session() as db:
+            user = await user_from_access_token(db, token)
+        if user is None:
+            return None, "Invalid, expired or revoked OAuth token.", None
+        return Caller(user, "oauth"), "", None
 
     # Otherwise it can only be the chat agent's short-lived token.
     user_id = read_token(token, CHAT_AUDIENCE)

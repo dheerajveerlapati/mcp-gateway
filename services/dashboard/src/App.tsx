@@ -3,6 +3,7 @@ import { NavLink, Navigate, Route, Routes } from 'react-router'
 import { api, type Me } from './api'
 import Account from './pages/Account'
 import Audit from './pages/Audit'
+import AuthorizeApp from './pages/AuthorizeApp'
 import Chat from './pages/Chat'
 import Keys from './pages/Keys'
 import Login from './pages/Login'
@@ -54,6 +55,7 @@ export default function App() {
           <Route path="/keys" element={<Keys />} />
           <Route path="/audit" element={<Audit />} />
           <Route path="/account" element={<Account />} />
+          <Route path="/authorize-app" element={<AuthorizeApp />} />
           <Route path="*" element={<Navigate to="/" />} />
         </Routes>
       </main>

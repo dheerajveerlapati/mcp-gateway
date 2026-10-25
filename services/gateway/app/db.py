@@ -73,6 +73,46 @@ class Server(Base):
     updated_at: Mapped[datetime] = mapped_column(server_default=func.now(), onupdate=func.now())
 
 
+class OAuthClient(Base):
+    """An app (e.g. Claude Code) that registered itself for the OAuth login flow."""
+
+    __tablename__ = "oauth_clients"
+
+    client_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    name: Mapped[str] = mapped_column(String(200))
+    redirect_uris: Mapped[str] = mapped_column(Text)  # JSON list; must match exactly
+    created_at: Mapped[datetime] = mapped_column(server_default=func.now())
+
+
+class OAuthCode(Base):
+    """A one-time authorization code (5 minutes), handed to the app after consent."""
+
+    __tablename__ = "oauth_codes"
+
+    code_hash: Mapped[str] = mapped_column(String(64), primary_key=True)
+    client_id: Mapped[str] = mapped_column(ForeignKey("oauth_clients.client_id", ondelete="CASCADE"))
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
+    redirect_uri: Mapped[str] = mapped_column(Text)
+    code_challenge: Mapped[str] = mapped_column(String(128))  # PKCE, S256
+    expires_at: Mapped[datetime]
+    used: Mapped[bool] = mapped_column(default=False)
+
+
+class OAuthToken(Base):
+    """An access token (1 hour) or refresh token (30 days) issued to an app for a user."""
+
+    __tablename__ = "oauth_tokens"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    token_hash: Mapped[str] = mapped_column(String(64), unique=True)
+    kind: Mapped[str] = mapped_column(String(10))  # "access" or "refresh"
+    client_id: Mapped[str] = mapped_column(ForeignKey("oauth_clients.client_id", ondelete="CASCADE"))
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    expires_at: Mapped[datetime]
+    revoked_at: Mapped[datetime | None]
+    created_at: Mapped[datetime] = mapped_column(server_default=func.now())
+
+
 class ToolPermission(Base):
     """An admin's override of who may use one tool (see app/permissions.py)."""
 

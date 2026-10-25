@@ -5,6 +5,7 @@ import logging
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response
 from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 from sqlalchemy import func, select, text
@@ -13,7 +14,7 @@ from starlette.routing import Route
 from app.config import settings
 from app.db import Server, Session, User
 from app.mcp_gateway import McpEndpoint, session_manager
-from app.routes import audit, auth, chat, keys, servers, users
+from app.routes import audit, auth, chat, keys, oauth, servers, users
 from app.security import encrypt, hash_password
 from app.upstreams import upstreams
 
@@ -61,6 +62,29 @@ app.include_router(keys.router)
 app.include_router(servers.router)
 app.include_router(audit.router)
 app.include_router(chat.router)
+app.include_router(oauth.router)
+
+
+class PublicEndpointsCors:
+    """Browser-based MCP clients (e.g. MCP Inspector) call /mcp and the OAuth
+    endpoints from their own origin, so those need CORS headers. Only those:
+    the cookie-based /api stays same-origin, and "*" never allows cookies."""
+
+    PATHS = ("/mcp", "/oauth/", "/.well-known/")
+
+    def __init__(self, app):
+        self.app = app
+        self.cors = CORSMiddleware(app, allow_origins=["*"], allow_methods=["GET", "POST", "DELETE"],
+                                   allow_headers=["*"], expose_headers=["WWW-Authenticate", "Mcp-Session-Id"])
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] == "http" and scope["path"].startswith(self.PATHS):
+            await self.cors(scope, receive, send)
+        else:
+            await self.app(scope, receive, send)
+
+
+app.add_middleware(PublicEndpointsCors)
 
 
 @app.get("/metrics", include_in_schema=False)
