@@ -23,7 +23,11 @@ metadata:
     {{- include "gateway.labels" . | nindent 4 }}
     app.kubernetes.io/name: gateway
 spec:
+  {{- if not .Values.gateway.autoscaling.enabled }}
+  # With autoscaling on, the HorizontalPodAutoscaler owns the count (hpa.yaml);
+  # setting it here too would reset it on every helm upgrade.
   replicas: {{ .Values.gateway.replicas }}
+  {{- end }}
   selector:
     matchLabels:
       app.kubernetes.io/instance: {{ .Release.Name }}

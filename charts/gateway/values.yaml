@@ -21,7 +21,14 @@ gateway:
     repository: gateway
     tag: "" # "" = chart appVersion
     pullPolicy: IfNotPresent
-  replicas: 1
+  replicas: 1 # ignored when autoscaling is on
+  # Add pods when their average CPU goes above the target (percent of
+  # resources.requests.cpu), remove them when load drops (after ~5 minutes).
+  autoscaling:
+    enabled: false
+    minReplicas: 2
+    maxReplicas: 6
+    targetCPUUtilizationPercentage: 70
   # The first admin, created on first start (password from the Secret).
   bootstrapAdminEmail: admin@example.com
   # Registered automatically on first start (WooCommerce first). Set a URL

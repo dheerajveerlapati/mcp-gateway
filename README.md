@@ -178,8 +178,11 @@ http://localhost:8000/metrics (tool calls, latency and upstream status per serve
 exposed through the Ingress). The Audit log page shows calls, error rate and p95 latency
 per server.
 
-**Two gateway replicas:** set `gateway.replicas: 2` in the values (production values
-already do). Change replicas through Helm values, not `kubectl scale`.
+**Several gateway replicas:** set `gateway.replicas: 2` in the values. Production values
+turn on the autoscaler instead (`gateway.autoscaling`): a HorizontalPodAutoscaler runs 2 to 6
+gateway pods, adding one when their average CPU goes above 70% of the request, and removing
+pods about 5 minutes after load drops. It needs metrics-server, which k3s includes. Watch it
+with `kubectl -n gateway get hpa -w`. Change replicas through Helm values, not `kubectl scale`.
 
 ## Production-like setup (VPS with k3s)
 
@@ -239,7 +242,7 @@ The same charts; differences live only in `values-prod.yaml` files.
 | Hostnames | `*.localtest.me` | real DNS names |
 | TLS | off | on, cert-manager + Let's Encrypt |
 | Images | built locally, `pullPolicy: Never` | `ghcr.io/<owner>/...:0.1.0` |
-| Replicas | 1 | gateway 2, MCP servers 2, dashboard 2 |
+| Replicas | 1 | gateway 2-6 (autoscaled on CPU), MCP servers 2, dashboard 2 |
 | Storage | 1-2 Gi, `local-path` | 5-10 Gi (set `storageClass` for a cloud disk) |
 | Resources | small | larger requests and limits |
 | Secrets | `scripts/secrets.sh` | same script, or an external secret manager |
@@ -297,7 +300,7 @@ docs/
 | 4. Many tools | `/mcp?tools=search` exposes `gateway__search_tools` + `gateway__call_tool` (same checks and audit); the chat agent switches to it above 30 tools | `services/gateway/app/tool_search.py`, `agent.py` |
 | 5. Hosted MCP servers | Add a server by container image: the gateway creates its Secret, Deployment (non-root, read-only fs, limits, no API token), Service and NetworkPolicy in `mcp-hosted` via server-side apply, and deletes them on removal | `services/gateway/app/hosting.py`, `charts/gateway/templates/hosted.yaml` |
 | 6. Security hardening | SSRF guard on server URLs (must resolve to public addresses unless an allowed in-cluster MCP host; re-checked before every connection); least-privilege RBAC (the gateway may manage 4 object kinds in `mcp-hosted` only); default-deny NetworkPolicies in every namespace; all containers non-root (WordPress too, via a safe sysctl for port 80); upstream credentials encrypted at rest (Fernet) | `services/gateway/app/url_safety.py`, `charts/*/templates/networkpolicy.yaml`, `hosted.yaml` |
-| 7. Scaling | Stateless `/mcp`, verified with 2 gateway replicas; a replica is ready only after its first upstream check; per-user rate limit counted in Postgres so it holds across replicas | `mcp_gateway.py`, `upstreams.py`, `main.py` |
+| 7. Scaling | Stateless `/mcp`, verified with 2 gateway replicas; CPU autoscaling (HPA, 2-6 pods) in prod; a replica is ready only after its first upstream check; per-user rate limit counted in Postgres so it holds across replicas | `mcp_gateway.py`, `upstreams.py`, `main.py`, `charts/gateway/templates/hpa.yaml` |
 | 8. Observability | Prometheus `/metrics` (calls by server and outcome, latency histogram, upstream up/down); per-server calls, error rate and p95 on the Audit page; readable reasons for unreachable upstreams and failed calls | `services/gateway/app/metrics.py`, `routes/audit.py`, `upstreams.py` |
 | 9. Upgrades and rollback | One Helm release per component, migrations in an init container with an advisory lock, documented above | this README |
 | 1. VPS deployment | Charts and prod values ready (TLS via cert-manager, GHCR images, 2 replicas); steps above | `values-prod.yaml` files |

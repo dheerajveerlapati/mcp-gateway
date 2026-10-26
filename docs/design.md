@@ -196,7 +196,7 @@ the server stores no chat history.
 | **Storage class** | `local-path` (node disk) | `local-path` on a single-node k3s; on a multi-node or cloud cluster set `storageClass` to a network disk; back up the MariaDB and Postgres volumes |
 | **Secrets** | `scripts/secrets.sh` generates them in the cluster | same script, or an external secret manager (Sealed Secrets, External Secrets). Turn on k3s secrets encryption (`--secrets-encryption`) so Secrets are encrypted in etcd |
 | **Images** | built and imported into k3d | multi-arch images in GHCR, pinned tags |
-| **Replicas** | 1 | gateway, MCP servers and dashboard 2 each (set in values, not with `kubectl scale`) |
+| **Replicas** | 1 | gateway 2-6 via a HorizontalPodAutoscaler on CPU; MCP servers and dashboard 2 each (set in values, not with `kubectl scale`) |
 | **Kubernetes API egress** | k3s defaults (`10.43.0.1:443`, API server on `6443`) | adjust `hosted.apiServerEgress` if the cluster uses other addresses |
 | **Cookies** | `Secure` off (plain HTTP) | `Secure` on automatically when `PUBLIC_URL` is https |
 

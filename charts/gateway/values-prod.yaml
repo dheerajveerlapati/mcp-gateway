@@ -9,7 +9,10 @@ ingress:
 gateway:
   image:
     registry: ghcr.io/OWNER # replace OWNER with the GitHub user/org
-  replicas: 2 # stateless MCP endpoint: any replica can serve any request
+  # Stateless MCP endpoint: any replica can serve any request, so the
+  # autoscaler can run 2 to 6 of them depending on load.
+  autoscaling:
+    enabled: true
   resources:
     requests: { cpu: 200m, memory: 384Mi }
     limits: { cpu: "2", memory: 1Gi }
