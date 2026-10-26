@@ -1,4 +1,8 @@
 import { type FormEvent, useState } from 'react'
+import Markdown from 'react-markdown'
+import rehypeRaw from 'rehype-raw'
+import rehypeSanitize from 'rehype-sanitize'
+import remarkGfm from 'remark-gfm'
 import { ApiError } from '../api'
 import { ErrorText, messageOf } from '../ui'
 
@@ -88,7 +92,15 @@ export default function Chat() {
           ) : (
             <div key={i} className="bubble assistant">
               {turn.tools.map(tool => <ToolCallView key={tool.id} tool={tool} />)}
-              {turn.content && <div className="answer">{turn.content}</div>}
+              {turn.content && (
+                <div className="answer">
+                  {/* Models answer in Markdown (tables, lists, sometimes <br>). Sanitizing
+                      keeps harmless tags and drops scripts: the text may come from tools. */}
+                  <Markdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeRaw, rehypeSanitize]}>
+                    {turn.content}
+                  </Markdown>
+                </div>
+              )}
               {turn.error && <p className="error">{turn.error}</p>}
               {busy && i === turns.length - 1 && !turn.content && !turn.error && <span className="muted">Thinking…</span>}
             </div>
