@@ -60,3 +60,19 @@ spec:
               service:
                 name: {{ .Release.Name }}-dashboard
                 port: { name: http }
+    {{- if .Values.loopbackHost }}
+    # Local only: MCP clients send OAuth tokens over plain http only to a
+    # loopback address, so a client on this machine uses http://localhost/mcp
+    # for the browser login (see issuer() in app/routes/oauth.py).
+    - host: {{ .Values.loopbackHost }}
+      http:
+        paths:
+          {{- range list "/mcp" "/.well-known" "/oauth" }}
+          - path: {{ . }}
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ $.Release.Name }}
+                port: { name: http }
+          {{- end }}
+    {{- end }}

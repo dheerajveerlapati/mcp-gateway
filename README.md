@@ -135,8 +135,12 @@ Open http://store.localtest.me, add a product to the cart, check out with
 authorization spec (Claude Code, MCP Inspector) get a 401 pointing to the gateway's
 OAuth metadata, register, and open the browser on the dashboard's consent page.
 ```bash
-claude mcp add --transport http mcp-gateway http://dashboard.localtest.me/mcp
+claude mcp add --transport http mcp-gateway http://localhost/mcp
 ```
+Locally the URL is `http://localhost/mcp`, not the dashboard host: MCP clients send OAuth
+tokens over plain http only to a loopback address, and the local install has no TLS.
+`values-local.yaml` serves `/mcp` and the OAuth endpoints on `localhost` too
+(`loopbackHost`); in production the dashboard host has https and is used as is.
 Connected apps are listed (and can be disconnected) on the API keys page.
 
 You see the tools of every enabled server you are allowed to use, named

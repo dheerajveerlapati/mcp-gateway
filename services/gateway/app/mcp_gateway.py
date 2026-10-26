@@ -32,7 +32,7 @@ from app.config import settings
 from app.metrics import TOOL_CALL_SECONDS, TOOL_CALLS
 from app.db import AuditLog, Server as ServerRow, Session, User
 from app.permissions import access_for, allowed_server_ids, load_overrides, may_use, may_use_server
-from app.routes.oauth import ACCESS_TOKEN_PREFIX, user_from_access_token
+from app.routes.oauth import ACCESS_TOKEN_PREFIX, issuer, user_from_access_token
 from app.security import API_KEY_PREFIX, CHAT_AUDIENCE, read_token
 from app.tool_search import CALL_TOOL, META_TOOLS, SEARCH_TOOL, search
 from app.upstreams import SEPARATOR, UpstreamCallError, upstreams
@@ -188,7 +188,8 @@ class McpEndpoint:
                 await audit_refusal(refused_user, refusal, receive)
             # The resource_metadata link is how OAuth-capable clients discover
             # the browser login (MCP authorization spec); others just see 401.
-            metadata = f"{settings.public_url}/.well-known/oauth-protected-resource"
+            host = dict(scope["headers"]).get(b"host", b"").decode()
+            metadata = f"{issuer(host)}/.well-known/oauth-protected-resource"
             response = JSONResponse({"error": refusal}, status_code=401,
                                     headers={"WWW-Authenticate": f'Bearer resource_metadata="{metadata}"'})
             await response(scope, receive, send)

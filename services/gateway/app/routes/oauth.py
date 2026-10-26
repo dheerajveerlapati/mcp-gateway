@@ -47,7 +47,20 @@ REFRESH_LIFETIME = timedelta(days=30)
 CODE_LIFETIME = timedelta(minutes=5)
 
 
-def issuer() -> str:
+LOOPBACK_HOSTS = ("localhost", "127.0.0.1", "::1")
+
+
+def issuer(host: str | None = None) -> str:
+    """The gateway's URL as this client reached it, for the OAuth documents.
+
+    MCP clients send tokens only over https, or over plain http to a loopback
+    address. Locally the gateway is plain http, so a client on this machine
+    uses http://localhost/mcp, and the documents must then name localhost too.
+    Only loopback hosts are taken from the request; any other Host header gets
+    the configured public URL, so a request cannot make us advertise its host.
+    """
+    if host and urlsplit(f"//{host}").hostname in LOOPBACK_HOSTS:
+        return f"http://{host}"
     return settings.public_url
 
 
@@ -55,20 +68,22 @@ def issuer() -> str:
 
 @router.get("/.well-known/oauth-protected-resource")
 @router.get("/.well-known/oauth-protected-resource/mcp")
-async def protected_resource_metadata():
+async def protected_resource_metadata(request: Request):
     """RFC 9728: what is protected, and who issues tokens for it."""
-    return {"resource": f"{issuer()}/mcp", "authorization_servers": [issuer()],
+    base = issuer(request.headers.get("host"))
+    return {"resource": f"{base}/mcp", "authorization_servers": [base],
             "bearer_methods_supported": ["header"]}
 
 
 @router.get("/.well-known/oauth-authorization-server")
-async def authorization_server_metadata():
+async def authorization_server_metadata(request: Request):
     """RFC 8414: where the login endpoints are and what they support."""
+    base = issuer(request.headers.get("host"))
     return {
-        "issuer": issuer(),
-        "authorization_endpoint": f"{issuer()}/oauth/authorize",
-        "token_endpoint": f"{issuer()}/oauth/token",
-        "registration_endpoint": f"{issuer()}/oauth/register",
+        "issuer": base,
+        "authorization_endpoint": f"{base}/oauth/authorize",
+        "token_endpoint": f"{base}/oauth/token",
+        "registration_endpoint": f"{base}/oauth/register",
         "response_types_supported": ["code"],
         "grant_types_supported": ["authorization_code", "refresh_token"],
         "code_challenge_methods_supported": ["S256"],
@@ -119,8 +134,9 @@ async def authorize(request: Request, db: AsyncSession = Depends(get_db)):
         return RedirectResponse(with_params(redirect_uri, error="invalid_request",
                                             error_description="PKCE with S256 is required",
                                             state=query.get("state")), status_code=302)
-    # The dashboard shows who is asking and lets the logged-in user decide.
-    return RedirectResponse(f"{issuer()}/authorize-app?{request.url.query}", status_code=302)
+    # The dashboard shows who is asking and lets the logged-in user decide. It is
+    # always the public URL: that is where the person's login cookie lives.
+    return RedirectResponse(f"{settings.public_url}/authorize-app?{request.url.query}", status_code=302)
 
 
 class Consent(BaseModel):

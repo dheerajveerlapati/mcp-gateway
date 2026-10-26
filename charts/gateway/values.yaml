@@ -3,6 +3,10 @@
 
 # Public hostname of the dashboard. The MCP endpoint is https://<host>/mcp.
 host: dashboard.localtest.me
+# Local only (values-local.yaml): also serve /mcp and the OAuth login on this
+# loopback host, because MCP clients use OAuth over plain http only with
+# localhost. Empty in production, where the dashboard host has https.
+loopbackHost: ""
 
 ingress:
   className: traefik

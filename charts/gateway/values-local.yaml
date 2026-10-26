@@ -1,5 +1,7 @@
 # Local k3d. *.localtest.me resolves to 127.0.0.1 (see the store chart).
 host: dashboard.localtest.me
+# Browser login for MCP clients on this machine: http://localhost/mcp
+loopbackHost: localhost
 
 # Images are built on this machine and imported by scripts/up.sh.
 gateway:

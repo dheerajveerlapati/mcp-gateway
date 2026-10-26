@@ -9,6 +9,9 @@ import { Input } from '@/components/ui/input'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 
 const GATEWAY_URL = `${window.location.origin}/mcp`
+// MCP clients use the OAuth browser sign-in over plain http only with a
+// loopback address, so a local (http) install signs in at localhost instead.
+const SIGN_IN_URL = window.location.protocol === 'https:' ? GATEWAY_URL : 'http://localhost/mcp'
 
 // "My API keys" page: how to connect an MCP client, plus the person's keys.
 export default function Keys() {
@@ -29,7 +32,7 @@ export default function Keys() {
           </CardHeader>
           <CardContent className="grid gap-4 md:grid-cols-2">
             <CopyBox label="Gateway URL" value={GATEWAY_URL} />
-            <CopyBox label="Claude Code, browser sign-in (no key)" value={`claude mcp add --transport http mcp-gateway ${GATEWAY_URL}`} />
+            <CopyBox label="Claude Code, browser sign-in (no key)" value={`claude mcp add --transport http mcp-gateway ${SIGN_IN_URL}`} />
           </CardContent>
         </Card>
         <KeyList />
