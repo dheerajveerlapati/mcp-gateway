@@ -41,7 +41,10 @@ OrderStatus = Literal["pending", "processing", "on-hold", "completed", "cancelle
 
 @mcp.tool(annotations=READ_ONLY)
 async def list_products(search: str | None = None, page: int = 1, per_page: int = 20) -> dict:
-    """List products in the store, newest first. Optionally filter by a search term."""
+    """List products in the store, newest first. Optionally filter by a search term.
+
+    Returns {count, products: [{id, name, price, status, stock_status, url}]}; price is a string.
+    """
     products = await call_store(store.get("/products", {
         "search": search, "page": page, "per_page": limit(per_page), "orderby": "date", "order": "desc",
     }))
@@ -50,7 +53,10 @@ async def list_products(search: str | None = None, page: int = 1, per_page: int 
 
 @mcp.tool()
 async def create_product(name: str, price: float, description: str = "", image_url: str | None = None) -> dict:
-    """Create a published product. Price is in the store currency. It appears on the storefront at once."""
+    """Create a published product. Price is in the store currency. It appears on the storefront at once.
+
+    Returns the product: {id, name, price, status, stock_status, url}.
+    """
     body = {"name": name, "regular_price": f"{price:.2f}", "description": description, "status": "publish"}
     if image_url:
         body["images"] = [{"src": image_url}]
@@ -71,6 +77,10 @@ async def list_orders(
 
     date_from / date_to are days in YYYY-MM-DD format (store time zone), both inclusive.
     For "today's orders" pass today's date as both date_from and date_to.
+
+    Returns {count, orders: [order]}. An order is {id, status, created, total, currency,
+    payment_method, customer, email, items: [{name, quantity, total}]}; totals are strings
+    in the order's currency.
     """
     orders = await call_store(store.get("/orders", {
         "after": f"{date_from}T00:00:00" if date_from else None,
@@ -84,13 +94,16 @@ async def list_orders(
 
 @mcp.tool(annotations=READ_ONLY)
 async def get_order(order_id: int) -> dict:
-    """Get one order with its items, customer and totals."""
+    """Get one order with its items, customer and totals. Returns one order, same fields as list_orders."""
     return order_summary(await call_store(store.get(f"/orders/{order_id}")))
 
 
 @mcp.tool()
 async def update_order_status(order_id: int, status: OrderStatus) -> dict:
-    """Change the status of an order, e.g. to 'completed' once it has shipped."""
+    """Change the status of an order, e.g. to 'completed' once it has shipped.
+
+    Returns the updated order, same fields as list_orders.
+    """
     return order_summary(await call_store(store.put(f"/orders/{order_id}", {"status": status})))
 
 

@@ -145,6 +145,11 @@ Read-only tools are for everyone; tools that change things (`woo__create_product
 `woo__update_order_status`, `github__issue_write`) are admin-only unless an admin opens
 them up per tool on the Servers page.
 
+**Many calls?** Every tool list also has `gateway__run_code`: the model writes one short
+JavaScript program (`await tools.woo.list_orders({...})`) that makes several calls in a
+sandbox and returns only the final result. Try *"Convert each recent order to USD and sum
+them"* in the chat.
+
 **Many tools?** Use `http://dashboard.localtest.me/mcp?tools=search`: the client then
 sees only `gateway__search_tools` and `gateway__call_tool`, and finds the tools it needs.
 
@@ -297,7 +302,7 @@ docs/
 |---|---|---|
 | 2. Tool permissions | Read-only tools (MCP `readOnlyHint`) for everyone, every other tool admin-only by default; admins override per tool. Restricted tools are hidden from `tools/list` **and** refused when called by name (audited as `denied`). Per user, admins can limit anyone (except the owner) to some servers; an admin can only give servers they have themselves | `services/gateway/app/permissions.py`, `mcp_gateway.py`, `routes/users.py`, Servers and Team pages |
 | 3. OAuth on the gateway | MCP authorization spec: protected-resource and authorization-server metadata, dynamic client registration, authorization code + PKCE (S256), refresh-token rotation, consent page, "Connected apps" with disconnect | `services/gateway/app/routes/oauth.py`, `dashboard/src/pages/AuthorizeApp.tsx` |
-| 4. Many tools | `/mcp?tools=search` exposes `gateway__search_tools` + `gateway__call_tool` (same checks and audit); the chat agent switches to it above 30 tools | `services/gateway/app/tool_search.py`, `agent.py` |
+| 4. Many tools | `/mcp?tools=search` exposes `gateway__search_tools` + `gateway__call_tool` (same checks and audit); the chat agent switches to it above 30 tools. **Code mode:** every tool list has `gateway__run_code`, which runs a model-written JavaScript program in a permission-less Deno sandbox; its `tools.*` calls go through the normal checks and audit, so a multi-call task is one model round | `services/gateway/app/tool_search.py`, `code_mode.py`, `code_runner.js`, `agent.py` |
 | 5. Hosted MCP servers | Add a server by container image: the gateway creates its Secret, Deployment (non-root, read-only fs, limits, no API token), Service and NetworkPolicy in `mcp-hosted` via server-side apply, and deletes them on removal | `services/gateway/app/hosting.py`, `charts/gateway/templates/hosted.yaml` |
 | 6. Security hardening | SSRF guard on server URLs (must resolve to public addresses unless an allowed in-cluster MCP host; re-checked before every connection); least-privilege RBAC (the gateway may manage 4 object kinds in `mcp-hosted` only); default-deny NetworkPolicies in every namespace; all containers non-root (WordPress too, via a safe sysctl for port 80); upstream credentials encrypted at rest (Fernet) | `services/gateway/app/url_safety.py`, `charts/*/templates/networkpolicy.yaml`, `hosted.yaml` |
 | 7. Scaling | Stateless `/mcp`, verified with 2 gateway replicas; CPU autoscaling (HPA, 2-6 pods) in prod; a replica is ready only after its first upstream check; per-user rate limit counted in Postgres so it holds across replicas | `mcp_gateway.py`, `upstreams.py`, `main.py`, `charts/gateway/templates/hpa.yaml` |

@@ -92,3 +92,11 @@ spec:
             failureThreshold: 3
           resources:
             {{- toYaml .Values.gateway.resources | nindent 12 }}
+          # The root filesystem is read-only; code mode's Deno runner needs a
+          # small scratch directory (app/code_mode.py).
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir: { sizeLimit: 64Mi }

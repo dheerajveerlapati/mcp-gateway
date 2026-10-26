@@ -36,7 +36,10 @@ SHIPPING_RATES = {"domestic": (49, 20), "international": (899, 450)}
 
 @mcp.tool(annotations=READ_ONLY)
 async def convert_currency(amount: float, from_currency: str, to_currency: str) -> dict:
-    """Convert an amount between INR, USD, EUR, GBP and AED (fixed demo rates)."""
+    """Convert an amount between INR, USD, EUR, GBP and AED (fixed demo rates).
+
+    Returns {amount, from, to, result}; result is the converted amount.
+    """
     source, target = from_currency.upper(), to_currency.upper()
     for code in (source, target):
         if code not in INR_PER_UNIT:
@@ -47,7 +50,10 @@ async def convert_currency(amount: float, from_currency: str, to_currency: str) 
 
 @mcp.tool(annotations=READ_ONLY)
 async def shipping_quote(weight_kg: float, country_code: str = "IN") -> dict:
-    """Estimate the shipping cost in INR for a parcel. country_code is ISO-2, e.g. IN, US."""
+    """Estimate the shipping cost in INR for a parcel. country_code is ISO-2, e.g. IN, US.
+
+    Returns {zone, weight_kg, cost_inr}.
+    """
     if weight_kg <= 0:
         raise ToolError("Weight must be more than 0 kg.")
     zone = "domestic" if country_code.upper() == "IN" else "international"
@@ -57,7 +63,7 @@ async def shipping_quote(weight_kg: float, country_code: str = "IN") -> dict:
 
 @mcp.tool(annotations=READ_ONLY)
 async def current_time(timezone: str = "Asia/Kolkata") -> dict:
-    """Current date and time in a time zone (IANA name, e.g. Asia/Kolkata, UTC)."""
+    """Current date and time in a time zone (IANA name, e.g. Asia/Kolkata, UTC). Returns {timezone, date, time}."""
     try:
         now = datetime.now(ZoneInfo(timezone))
     except ZoneInfoNotFoundError:

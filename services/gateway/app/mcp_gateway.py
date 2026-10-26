@@ -27,6 +27,7 @@ from sqlalchemy import func, select
 from starlette.responses import JSONResponse
 
 from app.auth import check_api_key
+from app.code_mode import RUN_CODE, RUN_CODE_TOOL, run_code
 from app.config import settings
 from app.metrics import TOOL_CALL_SECONDS, TOOL_CALLS
 from app.db import AuditLog, Server as ServerRow, Session, User
@@ -55,9 +56,10 @@ current_caller: ContextVar[Caller] = ContextVar("current_caller")
 
 async def list_tools(ctx, params) -> ListToolsResult:
     caller = current_caller.get()
+    # Code mode (gateway__run_code) is offered in both modes, next to the tools.
     if caller.search_mode:
-        return ListToolsResult(tools=META_TOOLS)
-    return ListToolsResult(tools=await visible_tools(caller))
+        return ListToolsResult(tools=[*META_TOOLS, RUN_CODE_TOOL])
+    return ListToolsResult(tools=[*await visible_tools(caller), RUN_CODE_TOOL])
 
 
 async def visible_tools(caller: Caller) -> list[Tool]:
@@ -104,6 +106,8 @@ async def call_tool(ctx, params: CallToolRequestParams) -> CallToolResult:
         return CallToolResult(content=[TextContent(type="text", text=found)])
     if params.name == CALL_TOOL:
         return await route_call(caller, str(arguments.get("name", "")), arguments.get("arguments") or {})
+    if params.name == RUN_CODE:
+        return await run_program(caller, str(arguments.get("code", "")))
 
     return await route_call(caller, params.name, arguments)
 
@@ -144,6 +148,18 @@ async def route_call(caller: Caller, name: str, arguments: dict) -> CallToolResu
         duration_ms=int(seconds * 1000), outcome=outcome,
         error=result.content[0].text if outcome != "ok" and result.content else None,
     )
+    return result
+
+
+async def run_program(caller: Caller, code: str) -> CallToolResult:
+    """Code mode (code_mode.py): every call the program makes goes through route_call."""
+    started = time.monotonic()
+    result = await run_code(code, lambda name, arguments: route_call(caller, name, arguments))
+    # One row for the program itself; each of its tool calls has its own row.
+    await write_audit(caller.user, caller.source, "gateway", "run_code",
+                      duration_ms=int((time.monotonic() - started) * 1000),
+                      outcome="error" if result.is_error else "ok",
+                      error=result.content[0].text[:2000] if result.is_error else None)
     return result
 
 

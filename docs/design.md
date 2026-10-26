@@ -138,6 +138,28 @@ schemas; call goes through exactly the same routing, permissions, rate limit and
 The chat agent switches to this mode when a user has more than 30 tools, so the model
 sees two tool definitions instead of hundreds.
 
+
+### Many calls: code mode (`app/code_mode.py`, `app/code_runner.js`)
+Every tool list, in both modes, also has `gateway__run_code(code)`. Instead of one model
+round trip per tool call, the model writes a short JavaScript program that makes the
+calls itself (`await tools.woo.list_orders({...})`); only the program's final result goes
+back to the model. "Convert each of today's orders to USD and sum them" becomes one model
+round instead of one per order, and the order list never passes through the model.
+- **Where it runs:** a separate Deno process started with no permissions (no network,
+  files, environment variables or subprocesses) and an empty environment, so it cannot
+  see the gateway's credentials. Its only way out is `tools.*`, sent back to the gateway
+  over stdin/stdout and run through `route_call`: the same permissions, server access,
+  rate limit and audit as a single call. The program itself gets one more audit row
+  (`gateway` / `run_code`).
+- **Limits:** 60 seconds, 50 tool calls, 64 MB of memory, 4 programs at a time per pod,
+  output cut at 20,000 characters. A program that returns without awaiting a call, writes
+  junk to stdout, or never ends is stopped with a clear error.
+- **Result shapes:** a program needs to know what a tool returns, so our tools' descriptions
+  end with a "Returns {...}" line, and the tool tells the model to check a sample first
+  when a tool does not say.
+- It sits next to the normal tools rather than replacing them: clients still see every
+  tool (the definition of done needs that), and the chat agent is told to prefer a program
+  for tasks of more than two calls.
 ### Several replicas
 Upstream status lives in each replica's memory. Two rules keep replicas correct:
 - `/readyz` stays 503 until the replica's first full upstream check, so Kubernetes sends

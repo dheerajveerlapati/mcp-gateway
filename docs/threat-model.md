@@ -85,6 +85,13 @@ What limits it today:
   gateway cannot reach private addresses other than DNS, its DB, the MCP namespaces and
   the Kubernetes API (no cloud metadata, no other cluster services).
 - **Timeouts and page limits** stop a server from hanging calls or flooding the model.
+- **Code mode runs model-written programs, never in the gateway process.** An injected
+  instruction could make the model write a hostile program, so programs run in a Deno
+  process with no permissions and an empty environment: no network, files, environment
+  variables or subprocesses, so no way to read credentials or reach internal services.
+  Their only power is `tools.*`, which goes through the same checks as a direct call;
+  a program can do nothing its user could not do with single calls. Time, call-count
+  and memory limits stop runaway programs.
 
 Residual risk: prompt injection is not solved by any of these. The real control is to
 grant powerful write tools only to trusted servers and trusted roles, and next to add

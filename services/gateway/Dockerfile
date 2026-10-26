@@ -1,6 +1,8 @@
 FROM python:3.12-slim
 
 COPY --from=ghcr.io/astral-sh/uv:0.13.0 /uv /usr/local/bin/uv
+# Deno runs code mode's model-written programs with no permissions (app/code_mode.py).
+COPY --from=denoland/deno:bin-2.1.4 /deno /usr/local/bin/deno
 
 WORKDIR /app
 
