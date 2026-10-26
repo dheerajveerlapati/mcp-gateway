@@ -1,103 +1,121 @@
-/* One small stylesheet for the whole dashboard. Colors are variables so
-   dark mode only has to redefine them. */
+/* Tailwind + the shadcn/ui theme. Colours are CSS variables (OKLCH), so dark
+   mode only redefines them; components use the semantic names (bg-card,
+   text-muted-foreground, border...) and never raw colours. */
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "@fontsource-variable/geist";
+@import "@fontsource-variable/geist-mono";
+@plugin "@tailwindcss/typography";
+
 :root {
-  --bg: #f6f7f9;
-  --card: #ffffff;
-  --text: #1d2330;
-  --muted: #667085;
-  --border: #e3e6eb;
-  --accent: #3b5bdb;
-  --danger: #c92a2a;
-  --ok: #2b8a3e;
-  --warn: #e67700;
-  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
-  color: var(--text);
-  background: var(--bg);
+  --radius: 0.625rem;
+  --background: oklch(0.985 0 0);
+  --foreground: oklch(0.145 0 0);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.145 0 0);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.145 0 0);
+  --primary: oklch(0.205 0 0);
+  --primary-foreground: oklch(0.985 0 0);
+  --secondary: oklch(0.97 0 0);
+  --secondary-foreground: oklch(0.205 0 0);
+  --muted: oklch(0.97 0 0);
+  --muted-foreground: oklch(0.556 0 0);
+  --accent: oklch(0.955 0 0);
+  --accent-foreground: oklch(0.205 0 0);
+  --destructive: oklch(0.577 0.245 27.325);
+  --border: oklch(0.922 0 0);
+  --input: oklch(0.922 0 0);
+  --ring: oklch(0.708 0 0);
+  --sidebar: oklch(0.975 0 0);
+  /* Status colours, used for small dots and badges only. */
+  --success: oklch(0.627 0.17 149);
+  --warning: oklch(0.705 0.16 62);
+  /* The chat's "working" glyph, a warm accent like Claude Code's. */
+  --spark: oklch(0.66 0.13 40);
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --bg: #111418;
-    --card: #1a1f26;
-    --text: #e6e9ef;
-    --muted: #98a2b3;
-    --border: #2c333d;
-    --accent: #748ffc;
-    --danger: #ff6b6b;
-    --ok: #69db7c;
-    --warn: #ffa94d;
+    --background: oklch(0.145 0 0);
+    --foreground: oklch(0.985 0 0);
+    --card: oklch(0.185 0 0);
+    --card-foreground: oklch(0.985 0 0);
+    --popover: oklch(0.205 0 0);
+    --popover-foreground: oklch(0.985 0 0);
+    --primary: oklch(0.922 0 0);
+    --primary-foreground: oklch(0.205 0 0);
+    --secondary: oklch(0.269 0 0);
+    --secondary-foreground: oklch(0.985 0 0);
+    --muted: oklch(0.269 0 0);
+    --muted-foreground: oklch(0.708 0 0);
+    --accent: oklch(0.269 0 0);
+    --accent-foreground: oklch(0.985 0 0);
+    --destructive: oklch(0.704 0.191 22.216);
+    --border: oklch(1 0 0 / 10%);
+    --input: oklch(1 0 0 / 15%);
+    --ring: oklch(0.556 0 0);
+    --sidebar: oklch(0.165 0 0);
+    --success: oklch(0.723 0.17 149);
+    --warning: oklch(0.769 0.15 70);
+    --spark: oklch(0.72 0.13 42);
   }
 }
 
-body { margin: 0; background: var(--bg); }
-main { max-width: 1100px; margin: 0 auto; padding: 16px; }
-h1 { font-size: 1.5rem; margin: 8px 0 16px; }
-h2 { font-size: 1.1rem; margin: 0; }
-code { font-family: ui-monospace, Consolas, monospace; font-size: 0.85em; word-break: break-all; }
-
-.topbar {
-  display: flex; align-items: center; gap: 24px; flex-wrap: wrap;
-  padding: 12px 24px; background: var(--card); border-bottom: 1px solid var(--border);
+@theme inline {
+  --font-sans: "Geist Variable", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "Geist Mono Variable", ui-monospace, SFMono-Regular, Consolas, monospace;
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-sidebar: var(--sidebar);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-spark: var(--spark);
 }
-.topbar nav { display: flex; gap: 16px; flex: 1; }
-.topbar nav a { color: var(--muted); text-decoration: none; }
-.topbar nav a.active { color: var(--accent); font-weight: 600; }
 
-.card {
-  background: var(--card); border: 1px solid var(--border); border-radius: 8px;
-  padding: 16px; margin-bottom: 16px; display: flex; flex-direction: column; gap: 10px;
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-feature-settings: "cv11", "ss01";
+  }
 }
-.card.narrow { max-width: 380px; margin: 80px auto; }
-.card.narrow-left { max-width: 420px; }
-.page-title { display: flex; justify-content: space-between; align-items: center; }
-.row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-.grow { flex: 1; }
-.muted { color: var(--muted); font-size: 0.9em; }
-.error { color: var(--danger); margin: 0; }
-.notice { border: 1px dashed var(--accent); border-radius: 6px; padding: 12px; display: flex; flex-direction: column; gap: 8px; }
-.filters { margin-bottom: 12px; }
-.tools { margin: 8px 0 0; padding-left: 18px; display: flex; flex-direction: column; gap: 4px; }
 
-label { display: flex; flex-direction: column; gap: 4px; font-size: 0.9em; }
-input, select, textarea {
-  padding: 7px 9px; border: 1px solid var(--border); border-radius: 6px;
-  background: var(--bg); color: var(--text); font: inherit;
+/* Chat: a light sweeping across the status words while the agent works. */
+@keyframes shimmer {
+  from { background-position: 100% 0; }
+  to { background-position: -100% 0; }
 }
-.row input { flex: 1; min-width: 160px; }
-
-button {
-  padding: 7px 14px; border: 1px solid var(--accent); border-radius: 6px;
-  background: var(--accent); color: #fff; font: inherit; cursor: pointer;
+.shimmer-text {
+  background: linear-gradient(90deg, var(--muted-foreground) 35%, var(--foreground) 50%, var(--muted-foreground) 65%);
+  background-size: 200% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: shimmer 2.2s linear infinite;
 }
-button.secondary { background: transparent; color: var(--accent); }
-button.danger { background: transparent; color: var(--danger); border-color: var(--danger); }
-button.link { background: none; border: none; color: var(--accent); padding: 0; }
-
-table { width: 100%; border-collapse: collapse; font-size: 0.9em; }
-th, td { text-align: left; padding: 8px 6px; border-bottom: 1px solid var(--border); vertical-align: top; }
-th { color: var(--muted); font-weight: 500; }
-.card table { overflow-x: auto; display: block; }
-
-.badge { padding: 2px 8px; border-radius: 10px; font-size: 0.8em; border: 1px solid currentColor; }
-.badge-connected, .badge-ok { color: var(--ok); }
-.badge-unreachable, .badge-error, .badge-timeout, .badge-denied { color: var(--danger); }
-.badge-disabled, .badge-unknown { color: var(--muted); }
-
-.chat { display: flex; flex-direction: column; gap: 10px; margin-bottom: 12px; }
-.bubble { padding: 10px 14px; border-radius: 10px; max-width: 85%; display: flex; flex-direction: column; gap: 6px; }
-.bubble.user { align-self: flex-end; background: var(--accent); color: #fff; }
-.bubble.assistant { align-self: flex-start; background: var(--card); border: 1px solid var(--border); }
-.answer { overflow-x: auto; }
-.answer > :first-child { margin-top: 0; }
-.answer > :last-child { margin-bottom: 0; }
-.answer table { border-collapse: collapse; margin: 0.5em 0; }
-.answer th, .answer td { border: 1px solid var(--border); padding: 0.3em 0.6em; vertical-align: top; text-align: left; }
-.answer pre { overflow-x: auto; }
-.tool-call { border-left: 3px solid var(--muted); padding-left: 8px; font-size: 0.9em; }
-.tool-call.tool-ok { border-color: var(--ok); }
-.tool-call.tool-error { border-color: var(--danger); }
-.tool-call pre { margin: 4px 0; padding: 6px; background: var(--bg); border-radius: 4px; overflow-x: auto; max-height: 240px; }
-
-.copy-box { display: flex; flex-direction: column; gap: 4px; }
-.copy-box code { padding: 8px; background: var(--bg); border: 1px solid var(--border); border-radius: 6px; }
-.copy-box button { align-self: flex-start; }
+@media (prefers-reduced-motion: reduce) {
+  .shimmer-text { animation: none; color: var(--muted-foreground); }
+}

@@ -1,26 +1,41 @@
+import { AlertTriangle, Plus, Unplug } from 'lucide-react'
 import { type FormEvent, useEffect, useState } from 'react'
 import { api, type ApiKey } from '../api'
-import { CopyBox, ErrorText, formatTime, messageOf } from '../ui'
+import { CopyBox, EmptyRow, ErrorText, Page, PageHeader, formatTime, messageOf } from '../ui'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Input } from '@/components/ui/input'
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 
 const GATEWAY_URL = `${window.location.origin}/mcp`
 
 // "My API keys" page: how to connect an MCP client, plus the person's keys.
 export default function Keys() {
   return (
-    <>
-      <h1>API keys</h1>
-      <section className="card">
-        <h2>Connect an MCP client</h2>
-        <p>
-          One URL gives you the tools of every enabled server. Either create a key below and add it to your client,
-          or add just the URL: clients that support OAuth (e.g. Claude Code) then open the browser to log you in.
-        </p>
-        <CopyBox label="Gateway URL" value={GATEWAY_URL} />
-        <CopyBox label="Claude Code, browser login (no key)" value={`claude mcp add --transport http mcp-gateway ${GATEWAY_URL}`} />
-      </section>
-      <KeyList />
-      <ConnectedApps />
-    </>
+    <Page>
+      <PageHeader
+        title="API keys"
+        description="Connect Claude Code, Cursor or MCP Inspector with one URL. Use a key, or just the URL to sign in through the browser."
+      />
+      <div className="space-y-6">
+        <Card>
+          <CardHeader>
+            <CardTitle>Connect an MCP client</CardTitle>
+            <CardDescription>
+              One URL gives you the tools of every server you may use. Clients that support OAuth (e.g. Claude Code) open the
+              browser to sign you in when you add just the URL.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="grid gap-4 md:grid-cols-2">
+            <CopyBox label="Gateway URL" value={GATEWAY_URL} />
+            <CopyBox label="Claude Code, browser sign-in (no key)" value={`claude mcp add --transport http mcp-gateway ${GATEWAY_URL}`} />
+          </CardContent>
+        </Card>
+        <KeyList />
+        <ConnectedApps />
+      </div>
+    </Page>
   )
 }
 
@@ -42,28 +57,41 @@ function ConnectedApps() {
   }
 
   return (
-    <section className="card">
-      <h2>Connected apps (browser login)</h2>
-      <table>
-        <thead><tr><th>App</th><th>Last login</th><th /></tr></thead>
-        <tbody>
+    <Card className="gap-0 pb-0">
+      <CardHeader className="pb-4">
+        <CardTitle>Connected apps</CardTitle>
+        <CardDescription>Apps you approved through the browser sign-in.</CardDescription>
+      </CardHeader>
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead className="pl-6">App</TableHead>
+            <TableHead>Last sign-in</TableHead>
+            <TableHead className="pr-6" />
+          </TableRow>
+        </TableHeader>
+        <TableBody>
           {apps.map(app => (
-            <tr key={app.client_id}>
-              <td>{app.name}</td>
-              <td>{formatTime(app.last_login)}</td>
-              <td><button className="danger" onClick={() => disconnect(app)}>Disconnect</button></td>
-            </tr>
+            <TableRow key={app.client_id}>
+              <TableCell className="pl-6 font-medium">{app.name}</TableCell>
+              <TableCell className="text-muted-foreground">{formatTime(app.last_login)}</TableCell>
+              <TableCell className="pr-6 text-right">
+                <Button variant="ghost-destructive" size="sm" onClick={() => disconnect(app)}>
+                  <Unplug /> Disconnect
+                </Button>
+              </TableCell>
+            </TableRow>
           ))}
-          {apps.length === 0 && <tr><td colSpan={3} className="muted">No apps connected.</td></tr>}
-        </tbody>
-      </table>
-    </section>
+          {apps.length === 0 && <EmptyRow colSpan={3}>No apps connected.</EmptyRow>}
+        </TableBody>
+      </Table>
+    </Card>
   )
 }
 
 // A person's keys: create, list, revoke. Without `userId` it shows your own
 // keys; admins pass a userId on the Team page to manage someone else's.
-export function KeyList({ userId }: { userId?: number }) {
+export function KeyList({ userId, title }: { userId?: number; title?: string }) {
   const [keys, setKeys] = useState<ApiKey[]>([])
   const [name, setName] = useState('')
   const [newSecret, setNewSecret] = useState<string | null>(null)
@@ -101,44 +129,74 @@ export function KeyList({ userId }: { userId?: number }) {
   }
 
   return (
-    <section className="card">
-      <h2>{userId ? 'Their keys' : 'Your keys'}</h2>
-      <form className="row" onSubmit={create}>
-        <input value={name} onChange={e => setName(e.target.value)} placeholder="Key name, e.g. Claude Code on laptop" required />
-        <button type="submit">Create key</button>
-      </form>
-      <ErrorText error={error} />
-
-      {newSecret && (
-        <div className="notice">
-          <p><strong>Copy this key now. It will not be shown again.</strong></p>
-          <CopyBox label="API key" value={newSecret} />
-          <CopyBox
-            label="Claude Code"
-            value={`claude mcp add --transport http mcp-gateway ${GATEWAY_URL} --header "Authorization: Bearer ${newSecret}"`}
-          />
-          <button className="secondary" onClick={() => setNewSecret(null)}>Done</button>
-        </div>
-      )}
-
-      <table>
-        <thead>
-          <tr><th>Name</th><th>Key</th><th>Created</th><th>Last used</th><th>Status</th><th /></tr>
-        </thead>
-        <tbody>
+    <Card className="gap-0 pb-0">
+      <CardHeader className="pb-4">
+        <CardTitle>{title ?? 'Your keys'}</CardTitle>
+        <CardDescription>Keys are stored only as a hash. Revoking one takes effect on the next request.</CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4 pb-4">
+        <form className="flex gap-2" onSubmit={create}>
+          <Input value={name} onChange={e => setName(e.target.value)} placeholder="Key name, e.g. Claude Code on laptop" required />
+          <Button type="submit">
+            <Plus /> Create key
+          </Button>
+        </form>
+        <ErrorText error={error} />
+        {newSecret && (
+          <div className="space-y-4 rounded-lg border border-warning/40 bg-warning/5 p-4">
+            <p className="flex items-center gap-2 text-sm font-medium">
+              <AlertTriangle className="size-4 text-warning" /> Copy this key now. It will not be shown again.
+            </p>
+            <CopyBox label="API key" value={newSecret} />
+            <CopyBox
+              label="Claude Code"
+              value={`claude mcp add --transport http mcp-gateway ${GATEWAY_URL} --header "Authorization: Bearer ${newSecret}"`}
+            />
+            <Button variant="outline" size="sm" onClick={() => setNewSecret(null)}>
+              Done
+            </Button>
+          </div>
+        )}
+      </CardContent>
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead className="pl-6">Name</TableHead>
+            <TableHead>Key</TableHead>
+            <TableHead>Created</TableHead>
+            <TableHead>Last used</TableHead>
+            <TableHead>Status</TableHead>
+            <TableHead className="pr-6" />
+          </TableRow>
+        </TableHeader>
+        <TableBody>
           {keys.map(k => (
-            <tr key={k.id}>
-              <td>{k.name}</td>
-              <td><code>{k.prefix}…</code></td>
-              <td>{formatTime(k.created_at)}</td>
-              <td>{formatTime(k.last_used_at)}</td>
-              <td>{k.revoked_at ? `revoked ${formatTime(k.revoked_at)}` : 'active'}</td>
-              <td>{!k.revoked_at && <button className="danger" onClick={() => revoke(k)}>Revoke</button>}</td>
-            </tr>
+            <TableRow key={k.id} className={k.revoked_at ? 'text-muted-foreground' : undefined}>
+              <TableCell className="pl-6 font-medium">{k.name}</TableCell>
+              <TableCell className="font-mono text-xs">{k.prefix}…</TableCell>
+              <TableCell className="text-xs">{formatTime(k.created_at)}</TableCell>
+              <TableCell className="text-xs">{formatTime(k.last_used_at)}</TableCell>
+              <TableCell>
+                {k.revoked_at ? (
+                  <Badge variant="secondary" title={`Revoked ${formatTime(k.revoked_at)}`}>
+                    Revoked
+                  </Badge>
+                ) : (
+                  <Badge variant="success">Active</Badge>
+                )}
+              </TableCell>
+              <TableCell className="pr-6 text-right">
+                {!k.revoked_at && (
+                  <Button variant="ghost-destructive" size="sm" onClick={() => revoke(k)}>
+                    Revoke
+                  </Button>
+                )}
+              </TableCell>
+            </TableRow>
           ))}
-          {keys.length === 0 && <tr><td colSpan={6} className="muted">No keys yet.</td></tr>}
-        </tbody>
-      </table>
-    </section>
+          {keys.length === 0 && <EmptyRow colSpan={6}>No keys yet.</EmptyRow>}
+        </TableBody>
+      </Table>
+    </Card>
   )
 }

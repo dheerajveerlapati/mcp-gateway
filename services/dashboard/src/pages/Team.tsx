@@ -1,8 +1,14 @@
+import { CheckCircle2, KeyRound, Trash2, UserPlus } from 'lucide-react'
 import { type FormEvent, useEffect, useState } from 'react'
 import { api, type Server, type TeamMember } from '../api'
 import { useMe } from '../session'
-import { CopyBox, ErrorText, formatTime, messageOf } from '../ui'
+import { CopyBox, ErrorText, Page, PageHeader, formatTime, initials, messageOf } from '../ui'
 import { KeyList } from './Keys'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Checkbox, Input, NativeSelect } from '@/components/ui/input'
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 
 // Admins only: invite people, change roles, remove people, manage their keys,
 // and choose which servers each person may use.
@@ -23,7 +29,9 @@ export default function Team() {
     }
   }
 
-  useEffect(() => { load() }, [])
+  useEffect(() => {
+    load()
+  }, [])
 
   async function run(action: () => Promise<unknown>) {
     setError(null)
@@ -45,86 +53,149 @@ export default function Team() {
     }
   }
 
+  const keysOf = members.find(m => m.id === openKeysFor)
+
   return (
-    <>
-      <h1>Team</h1>
-      <InviteForm onInvited={load} />
-      <ErrorText error={error} />
-      <section className="card">
-        <table>
-          <thead>
-            <tr><th>Name</th><th>Email</th><th>Role</th><th>Servers</th><th>Status</th><th>Joined</th><th /></tr>
-          </thead>
-          <tbody>
-            {members.map(m => (
-              <tr key={m.id}>
-                <td>{m.name}{m.id === me.id && ' (you)'}</td>
-                <td>{m.email}</td>
-                <td>
-                  {m.owner ? 'admin (owner)' : (
-                    <select value={m.role} onChange={e => changeRole(m, e.target.value)}>
-                      <option value="member">member</option>
-                      <option value="admin">admin</option>
-                    </select>
-                  )}
-                </td>
-                <td>
-                  <ServerAccess member={m} servers={servers} editable={!m.owner && m.id !== me.id}
-                                onChange={(all, ids) => setServerAccess(m, all, ids)} />
-                </td>
-                <td>{m.status}</td>
-                <td>{formatTime(m.created_at)}</td>
-                <td className="row">
-                  {m.status === 'active' && (
-                    <button className="secondary" onClick={() => setOpenKeysFor(openKeysFor === m.id ? null : m.id)}>
-                      Keys
-                    </button>
-                  )}
-                  {m.id !== me.id && !m.owner && <button className="danger" onClick={() => remove(m)}>Remove</button>}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </section>
-      {openKeysFor && (
-        <>
-          <h2>Keys of {members.find(m => m.id === openKeysFor)?.email}</h2>
-          <KeyList userId={openKeysFor} />
-        </>
-      )}
-    </>
+    <Page>
+      <PageHeader
+        title="Team"
+        description="Invite people, set their role, and choose which servers each person may use. The owner always has every server."
+      />
+      <div className="space-y-6">
+        <InviteForm onInvited={load} />
+        <ErrorText error={error} />
+
+        <Card className="gap-0 py-0">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead className="pl-5">Member</TableHead>
+                <TableHead>Role</TableHead>
+                <TableHead>Servers</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead>Joined</TableHead>
+                <TableHead className="pr-5" />
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {members.map(m => (
+                <TableRow key={m.id} className="align-top">
+                  <TableCell className="pl-5">
+                    <div className="flex items-center gap-3">
+                      <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-secondary text-xs font-medium">
+                        {initials(m.name)}
+                      </div>
+                      <div className="min-w-0">
+                        <div className="font-medium">
+                          {m.name}
+                          {m.id === me.id && <span className="ml-1.5 text-xs font-normal text-muted-foreground">(you)</span>}
+                        </div>
+                        <div className="truncate text-xs text-muted-foreground">{m.email}</div>
+                      </div>
+                    </div>
+                  </TableCell>
+                  <TableCell>
+                    {m.owner ? (
+                      <Badge variant="secondary">Owner</Badge>
+                    ) : (
+                      <NativeSelect className="w-28" value={m.role} onChange={e => changeRole(m, e.target.value)}>
+                        <option value="member">Member</option>
+                        <option value="admin">Admin</option>
+                      </NativeSelect>
+                    )}
+                  </TableCell>
+                  <TableCell>
+                    <ServerAccess
+                      member={m}
+                      servers={servers}
+                      editable={!m.owner && m.id !== me.id}
+                      onChange={(all, ids) => setServerAccess(m, all, ids)}
+                    />
+                  </TableCell>
+                  <TableCell>
+                    <Badge variant={m.status === 'active' ? 'success' : 'warning'} className="capitalize">
+                      {m.status}
+                    </Badge>
+                  </TableCell>
+                  <TableCell className="text-xs whitespace-nowrap text-muted-foreground">{formatTime(m.created_at)}</TableCell>
+                  <TableCell className="pr-5">
+                    <div className="flex justify-end gap-1">
+                      {m.status === 'active' && (
+                        <Button
+                          variant={openKeysFor === m.id ? 'secondary' : 'ghost'}
+                          size="sm"
+                          onClick={() => setOpenKeysFor(openKeysFor === m.id ? null : m.id)}
+                        >
+                          <KeyRound /> Keys
+                        </Button>
+                      )}
+                      {m.id !== me.id && !m.owner && (
+                        <Button variant="ghost-destructive" size="icon-sm" onClick={() => remove(m)} title="Remove">
+                          <Trash2 />
+                        </Button>
+                      )}
+                    </div>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </Card>
+
+        {keysOf && <KeyList userId={keysOf.id} title={`API keys of ${keysOf.name}`} />}
+      </div>
+    </Page>
   )
 }
 
 // "All servers", or a tick per server. Only servers the admin has are listed.
-function ServerAccess({ member, servers, editable, onChange }: {
+function ServerAccess({
+  member,
+  servers,
+  editable,
+  onChange,
+}: {
   member: TeamMember
   servers: Server[]
   editable: boolean
   onChange: (allServers: boolean, serverIds: number[]) => void
 }) {
-  if (member.owner) return <span className="muted">all (owner)</span>
-  const names = (ids: number[]) =>
-    ids.map(id => servers.find(s => s.id === id)?.name ?? `#${id}`).join(', ') || 'none'
-  if (!editable) return <span className="muted">{member.all_servers ? 'all' : names(member.server_ids)}</span>
+  const names = (ids: number[]) => ids.map(id => servers.find(s => s.id === id)?.name ?? `#${id}`)
+
+  if (member.owner) return <span className="text-xs text-muted-foreground">All servers</span>
+  if (!editable) {
+    return member.all_servers ? (
+      <span className="text-xs text-muted-foreground">All servers</span>
+    ) : (
+      <div className="flex flex-wrap gap-1">
+        {names(member.server_ids).map(n => (
+          <Badge key={n} variant="outline" className="font-mono">
+            {n}
+          </Badge>
+        ))}
+        {member.server_ids.length === 0 && <span className="text-xs text-muted-foreground">None</span>}
+      </div>
+    )
+  }
 
   const toggle = (id: number, on: boolean) =>
     onChange(false, on ? [...member.server_ids, id] : member.server_ids.filter(x => x !== id))
   return (
-    <div>
-      <label>
-        <input type="checkbox" checked={member.all_servers}
-               onChange={e => onChange(e.target.checked, e.target.checked ? [] : servers.map(s => s.id))} />
-        {' '}all servers
+    <div className="space-y-1.5 text-sm">
+      <label className="flex items-center gap-2">
+        <Checkbox
+          checked={member.all_servers}
+          onChange={e => onChange(e.target.checked, e.target.checked ? [] : servers.map(s => s.id))}
+        />
+        All servers
       </label>
-      {!member.all_servers && servers.map(s => (
-        <label key={s.id} style={{ display: 'block' }}>
-          <input type="checkbox" checked={member.server_ids.includes(s.id)}
-                 onChange={e => toggle(s.id, e.target.checked)} />
-          {' '}{s.name}
-        </label>
-      ))}
+      {!member.all_servers &&
+        servers.map(s => (
+          <label key={s.id} className="flex items-center gap-2 pl-6 font-mono text-xs">
+            <Checkbox checked={member.server_ids.includes(s.id)} onChange={e => toggle(s.id, e.target.checked)} />
+            {s.name}
+          </label>
+        ))}
     </div>
   )
 }
@@ -151,24 +222,33 @@ function InviteForm({ onInvited }: { onInvited: () => void }) {
   }
 
   return (
-    <section className="card">
-      <h2>Invite someone</h2>
-      <form className="row" onSubmit={submit}>
-        <input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="email" required />
-        <input value={name} onChange={e => setName(e.target.value)} placeholder="name" required />
-        <select value={role} onChange={e => setRole(e.target.value)}>
-          <option value="member">member</option>
-          <option value="admin">admin</option>
-        </select>
-        <button type="submit">Invite</button>
-      </form>
-      <ErrorText error={error} />
-      {inviteUrl && (
-        <div className="notice">
-          <p>Send this one-time link to them (valid 7 days). It will not be shown again.</p>
-          <CopyBox label="Invite link" value={inviteUrl} />
-        </div>
-      )}
-    </section>
+    <Card>
+      <CardHeader>
+        <CardTitle>Invite someone</CardTitle>
+        <CardDescription>They get a one-time link, valid for 7 days, to set their password.</CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <form className="flex flex-wrap gap-2" onSubmit={submit}>
+          <Input className="min-w-48 flex-1" type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="Email" required />
+          <Input className="min-w-40 flex-1" value={name} onChange={e => setName(e.target.value)} placeholder="Name" required />
+          <NativeSelect className="w-32" value={role} onChange={e => setRole(e.target.value)}>
+            <option value="member">Member</option>
+            <option value="admin">Admin</option>
+          </NativeSelect>
+          <Button type="submit">
+            <UserPlus /> Invite
+          </Button>
+        </form>
+        <ErrorText error={error} />
+        {inviteUrl && (
+          <div className="space-y-3 rounded-lg border border-success/30 bg-success/5 p-4">
+            <p className="flex items-center gap-2 text-sm font-medium">
+              <CheckCircle2 className="size-4 text-success" /> Invite created. Send this link; it will not be shown again.
+            </p>
+            <CopyBox label="Invite link" value={inviteUrl} />
+          </div>
+        )}
+      </CardContent>
+    </Card>
   )
 }

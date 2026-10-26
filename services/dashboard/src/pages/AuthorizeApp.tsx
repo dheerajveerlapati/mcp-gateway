@@ -1,8 +1,12 @@
+import { Eye, ScrollText, Unplug } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { useSearchParams } from 'react-router'
 import { api } from '../api'
 import { useMe } from '../session'
 import { ErrorText, messageOf } from '../ui'
+import { AuthLayout } from './Login'
+import { Button } from '@/components/ui/button'
+import { Skeleton } from '@/components/ui/misc'
 
 // OAuth consent page. An MCP client (e.g. Claude Code) sent the browser here
 // via /oauth/authorize. The user is logged in (App shows the login form first
@@ -39,22 +43,33 @@ export default function AuthorizeApp() {
   }
 
   return (
-    <section className="card narrow">
-      <h1>Connect an app</h1>
+    <AuthLayout title="Connect an app" description={`Signed in as ${me.email}`}>
+      {!appName && !error && <Skeleton className="h-32 w-full" />}
       {appName && (
-        <>
-          <p><strong>{appName}</strong> wants to use the MCP gateway as <strong>{me.email}</strong>.</p>
-          <p className="muted">
-            It will see and call the same tools you can, and every call is in the audit log under your name.
-            You can disconnect it any time on the API keys page.
+        <div className="space-y-5">
+          <p className="text-sm">
+            <span className="font-semibold">{appName}</span> wants to use the MCP gateway as you.
           </p>
-          <div className="row">
-            <button onClick={() => decide(true)}>Allow</button>
-            <button className="secondary" onClick={() => decide(false)}>Deny</button>
+          <ul className="space-y-3 text-sm text-muted-foreground">
+            <li className="flex gap-3">
+              <Eye className="mt-0.5 size-4 shrink-0" /> It sees and calls the same tools you can.
+            </li>
+            <li className="flex gap-3">
+              <ScrollText className="mt-0.5 size-4 shrink-0" /> Every call is in the audit log under your name.
+            </li>
+            <li className="flex gap-3">
+              <Unplug className="mt-0.5 size-4 shrink-0" /> You can disconnect it any time on the API keys page.
+            </li>
+          </ul>
+          <div className="grid grid-cols-2 gap-2">
+            <Button variant="outline" onClick={() => decide(false)}>
+              Deny
+            </Button>
+            <Button onClick={() => decide(true)}>Allow</Button>
           </div>
-        </>
+        </div>
       )}
       <ErrorText error={error} />
-    </section>
+    </AuthLayout>
   )
 }
