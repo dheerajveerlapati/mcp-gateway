@@ -78,8 +78,20 @@ async def visible_tools(caller: Caller) -> list[Tool]:
                 "name": f"{server.name}{SEPARATOR}{tool.name}",
                 # Tell the model (and the person reading) where the tool comes from.
                 "description": f"[{server.name}] {tool.description or ''}".strip(),
+                "output_schema": spec_output_schema(tool),
             }))
     return tools
+
+
+def spec_output_schema(tool: Tool) -> dict | None:
+    """The tool's outputSchema, or None if it breaks the spec.
+
+    MCP requires `"type": "object"`. Some upstreams send e.g. ["object", "null"];
+    passed on as is, the SDK rejects the whole tools/list. The schema is only
+    a description of the result, so the tool works fine without it.
+    """
+    schema = tool.output_schema
+    return schema if schema is None or schema.get("type") == "object" else None
 
 
 async def call_tool(ctx, params: CallToolRequestParams) -> CallToolResult:
