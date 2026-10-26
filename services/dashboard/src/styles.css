@@ -8,6 +8,8 @@
 @plugin "@tailwindcss/typography";
 
 :root {
+  /* Native controls (select lists, checkboxes, scrollbars) follow the theme. */
+  color-scheme: light;
   --radius: 0.625rem;
   --background: oklch(0.985 0 0);
   --foreground: oklch(0.145 0 0);
@@ -37,6 +39,7 @@
 
 @media (prefers-color-scheme: dark) {
   :root {
+    color-scheme: dark;
     --background: oklch(0.145 0 0);
     --foreground: oklch(0.985 0 0);
     --card: oklch(0.185 0 0);
@@ -100,6 +103,12 @@
   body {
     @apply bg-background text-foreground antialiased;
     font-feature-settings: "cv11", "ss01";
+  }
+  /* The open list of a native <select> is drawn by the browser: give its
+     options the theme's colours so none is light text on a light list. */
+  option {
+    background-color: var(--popover);
+    color: var(--popover-foreground);
   }
 }
 
