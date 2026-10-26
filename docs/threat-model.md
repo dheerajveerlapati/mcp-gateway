@@ -124,15 +124,19 @@ protected component.
 
 | A member can | A member cannot |
 |---|---|
-| Use the read-only tools of every enabled server, plus any tool an admin opened up | Use write tools that are admin-only (hidden and refused) |
-| See their own audit rows and the server list | See other members' audit rows, the team list, or any credential |
+| Use the read-only tools of the enabled servers they may use (all, unless an admin limited them to some), plus any tool an admin opened up | Use write tools that are admin-only, or tools of servers they were not given (hidden and refused) |
+| See their own audit rows and the servers they may use | See other members' audit rows, the team list, or any credential |
 | Read data the tools return, which may include customer names and emails from orders | See, use or revoke another member's API keys or OAuth apps |
 | Use up their own rate limit | Use up anyone else's: the limit is per user |
 | | Invite, remove or change roles (admin only) |
 | | Act under another member's name: every audit row carries the real caller |
 
 An **admin** can do everything a member can, plus remove members, revoke anyone's keys,
-change roles (but never remove the last admin) and add or change servers. Admin actions on
+change roles and add or change servers. Server access is a hierarchy: the **owner** (the
+first admin) always has every server and cannot be limited, demoted or removed; an admin
+can only give servers they have themselves and only manage people whose servers they also
+have, and nobody changes their own access. A limited admin sees and manages only their
+own servers. Admin actions on
 servers and members are not yet in the audit log; only tool calls are.
 
 ## Other controls

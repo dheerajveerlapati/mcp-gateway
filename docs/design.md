@@ -8,8 +8,8 @@
 | woo-mcp | Our MCP server: `list_products`, `create_product`, `list_orders`, `get_order`, `update_order_status`, `ping` | Python, MCP SDK 2.3 (`MCPServer`), httpx |
 | utils-mcp | Second in-cluster upstream: `convert_currency`, `shipping_quote`, `current_time`, `ping`, `slow_task` | same |
 | GitHub MCP | Third upstream, hosted by GitHub, bearer token | external |
-| gateway | Dashboard API, team and keys, upstream registry and health checks, the `/mcp` endpoint, audit log, chat agent | FastAPI, SQLAlchemy, Postgres, MCP SDK, deepagents |
-| dashboard | Servers, Team, API keys, Audit log, Chat, Account | React + Vite + TypeScript, nginx |
+| gateway | Dashboard API, team and keys, upstream registry and health checks, the `/mcp` endpoint, audit log, chat agent, code mode | FastAPI, SQLAlchemy, Postgres, MCP SDK, deepagents; Deno for code-mode programs |
+| dashboard | Servers, Team, API keys, Audit log, Chat, Account | React + Vite + TypeScript, Tailwind CSS + shadcn/ui components, served by nginx |
 
 ## Architecture choices
 
@@ -75,6 +75,9 @@ restarted or dead upstream can never leave a half-broken connection behind.
 takes effect at once on every replica) and returns the remembered tools of those that
 are `connected`. Listing never waits on an upstream, so a dead or slow server cannot
 slow it down; it simply contributes no tools.
+An upstream tool whose `outputSchema` is not an object schema (some send
+`["object", "null"]`) is listed without it: MCP requires `"type": "object"`, and the SDK
+would otherwise reject the whole list.
 
 ### Name collisions: always prefix
 Every tool is exposed as `<server>__<tool>`, e.g. `woo__ping` and `utils__ping`.
@@ -202,7 +205,10 @@ The chat is **another MCP client of the gateway**, not a shortcut:
    Its built-in file, shell and sub-agent tools are switched off (hidden from the model
    and rejected if called): it acts only through the gateway.
 5. The steps stream to the browser as Server-Sent Events: each tool call, its result,
-   the answer.
+   the answer. The page shows a working indicator, a card per tool call (arguments,
+   result, duration) and can stop the answer (Esc).
+6. For a task of more than two calls the agent is told to write one
+   `gateway__run_code` program instead of calling tools one by one (code mode, above).
 
 Its calls therefore pass the same checks and land in the audit log under the user, with
 source `chat`. The provider is a Helm value (`groq` by default, or `google_genai`), so a

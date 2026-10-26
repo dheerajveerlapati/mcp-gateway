@@ -286,8 +286,9 @@ charts/
 services/
   woo-mcp/      our WooCommerce MCP server (Python, MCP SDK)
   utils-mcp/    helper MCP server: currency, shipping, time, ping, slow_task
-  gateway/      FastAPI: dashboard API, /mcp aggregator, chat agent, OAuth, migrations
-  dashboard/    React + Vite + TypeScript
+  gateway/      FastAPI: dashboard API, /mcp aggregator, chat agent, OAuth, code mode
+                (Deno sandbox), migrations
+  dashboard/    React + Vite + TypeScript, Tailwind CSS + shadcn/ui
 scripts/
   up.sh         one-command local setup
   secrets.sh    creates the Kubernetes Secrets with random values
@@ -308,6 +309,6 @@ docs/
 | 7. Scaling | Stateless `/mcp`, verified with 2 gateway replicas; CPU autoscaling (HPA, 2-6 pods) in prod; a replica is ready only after its first upstream check; per-user rate limit counted in Postgres so it holds across replicas | `mcp_gateway.py`, `upstreams.py`, `main.py`, `charts/gateway/templates/hpa.yaml` |
 | 8. Observability | Prometheus `/metrics` (calls by server and outcome, latency histogram, upstream up/down); per-server calls, error rate and p95 on the Audit page; readable reasons for unreachable upstreams and failed calls | `services/gateway/app/metrics.py`, `routes/audit.py`, `upstreams.py` |
 | 9. Upgrades and rollback | One Helm release per component, migrations in an init container with an advisory lock, documented above | this README |
-| 1. VPS deployment | Charts and prod values ready (TLS via cert-manager, GHCR images, 2 replicas); steps above | `values-prod.yaml` files |
+| 1. VPS deployment | Charts and prod values ready (TLS via cert-manager, GHCR images, gateway autoscaled 2-6, other services 2 replicas); steps above | `values-prod.yaml` files |
 
 Not attempted: the multi-store bonus.
